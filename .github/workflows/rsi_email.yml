@@ -2,7 +2,7 @@ name: RSI Email
 
 on:
   schedule:
-  - cron: "*/5 * * * *"
+    - cron: "*/5 * * * *"
     # 北京时间 12:00 = UTC 04:00
     #- cron: "0 4 * * 1-5"
 
