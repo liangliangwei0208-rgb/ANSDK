@@ -1889,7 +1889,7 @@ def save_fund_estimate_table_image(
     fig_h = max(1.8, row_height * (nrows + 1) + 0.45)
 
     if figure_width is None:
-        fig_w = 12.0 if ncols >= 5 else 10.5
+        fig_w = 14.0 if ncols >= 5 else 12.5
     else:
         fig_w = figure_width
 
@@ -1951,11 +1951,11 @@ def save_fund_estimate_table_image(
 
     # 按列名动态设置列宽
     col_width_by_name = {
-        "序号": 0.08,
-        "基金代码": 0.14,
-        "基金名称": 0.34,
-        "今日预估涨跌幅": 0.18,
-        "限购金额": 0.18,
+        "序号": 0.06,
+        "基金代码": 0.10,
+        "基金名称": 0.37,
+        "今日预估涨跌幅": 0.16,
+        "限购金额": 0.17,
         "估算方式": 0.16,
     }
 
