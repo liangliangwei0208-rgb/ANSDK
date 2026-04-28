@@ -2,8 +2,8 @@ name: Liang Email
 
 on:
   schedule:
-    # 每 3 小时运行一次；默认按 UTC 计算
-    - cron: "0 */4.5 * * *"
+    # 每 6 小时运行一次；默认按 UTC 计算
+    - cron: "0 */6 * * *"
 
   # 允许在 GitHub 网页手动运行
   workflow_dispatch:
