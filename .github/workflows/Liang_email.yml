@@ -48,4 +48,4 @@ jobs:
 
       - name: Run Liang email script
         run: |
-          python main.py
+          python -u main.py
