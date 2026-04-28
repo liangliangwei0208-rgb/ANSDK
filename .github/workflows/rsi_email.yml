@@ -1,9 +1,9 @@
-name: RSI Email
+name: Liang Email
 
 on:
   schedule:
     # 每 3 小时运行一次；默认按 UTC 计算
-    - cron: "0 */3 * * *"
+    - cron: "0 */4.5 * * *"
 
   # 允许在 GitHub 网页手动运行
   workflow_dispatch:
