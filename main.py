@@ -116,7 +116,16 @@ def main():
             us_realtime=False,
             hk_realtime=False,
             renormalize_available_holdings=True,
+        
+            # 新增缓存参数
+            cache_enabled=True,
+            holding_cache_days=75,
+            purchase_limit_cache_days=7,
+            security_return_cache_enabled=True,
+            cn_hk_hourly_cache=True,
+        
             include_purchase_limit=True,
+            purchase_limit_timeout=8,
             include_method_col=False,
             sort_by_return=True,
             watermark_text="鱼师-发光发热",
@@ -175,6 +184,12 @@ def main():
             down_color="green",
             print_table=True,
             save_table=True,
+            
+            cache_enabled=True
+            holding_cache_days=75
+            purchase_limit_cache_days=7
+            security_return_cache_enabled=True
+            cn_hk_hourly_cache=True
         )
         log("国内基金持仓估算表格生成完成")
 
