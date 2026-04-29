@@ -41,6 +41,7 @@ result_df, detail_map = estimate_funds_and_save_table(
     title=None,
     holding_mode="auto",
     us_realtime=False,
+    hk_realtime=True,
     include_purchase_limit=True,
     sort_by_return=True,
     watermark_text="鱼师",
@@ -925,6 +926,7 @@ def format_pct(value, digits=4):
 
 _US_SPOT_SINA_CACHE = None
 _US_SPOT_EM_CACHE = None
+_HK_SPOT_EM_CACHE = None
 
 
 def infer_sina_cn_symbol(code):
@@ -1071,13 +1073,81 @@ def fetch_hk_return_pct_akshare_daily(code, lookback_days=90):
     return (last_close / prev_close - 1.0) * 100.0, "ak_stock_hk_hist_close_calc"
 
 
+def _normalize_hk_symbol_for_match(value):
+    """
+    统一港股行情表中的代码格式，用于匹配。
+
+    支持：
+        700
+        00700
+        HK00700
+        00700.HK
+
+    返回：
+        00700
+    """
+    text = str(value).strip().upper()
+    text = text.replace(".HK", "")
+    text = text.replace("HK", "")
+
+    digits = re.sub(r"\D", "", text)
+
+    if not digits:
+        return ""
+
+    if len(digits) > 5:
+        digits = digits[-5:]
+
+    return digits.zfill(5)
+
+
+def _match_hk_row(df, hk_code):
+    """
+    在 AKShare 港股实时行情表中匹配指定港股代码。
+    """
+    hk_code = normalize_hk_code(hk_code)
+
+    code_cols = [
+        "代码",
+        "股票代码",
+        "symbol",
+        "Symbol",
+        "SYMBOL",
+        "code",
+        "Code",
+    ]
+
+    code_col = _pick_column(df, code_cols)
+
+    if code_col is None:
+        raise RuntimeError(f"港股实时行情表缺少代码列，当前列={list(df.columns)}")
+
+    tmp = df.copy()
+    tmp["_hk_code_norm"] = tmp[code_col].astype(str).map(_normalize_hk_symbol_for_match)
+
+    hit = tmp[tmp["_hk_code_norm"] == hk_code]
+
+    if hit.empty:
+        return None
+
+    return hit.iloc[0]
+
+
 def fetch_hk_return_pct_sina(code, retry=2, sleep_seconds=0.8):
     """
     使用新浪港股单只股票实时行情获取涨跌幅。
 
-    注意：
-        这是单只港股请求，不会拉取全市场港股列表。
-        该函数作为补充兜底；默认主接口仍是 AKShare 港股日线。
+    安全逻辑：
+        - 不再使用字段猜测；
+        - 只使用明确的价格字段计算：最新价 / 昨收价 - 1；
+        - 如果 latest / prev_close 不能可靠解析，直接失败；
+        - 上游 fetch_hk_return_pct() 再尝试东方财富实时与港股日线兜底。
+
+    新浪港股接口示例：
+        https://hq.sinajs.cn/list=hk00700
+
+    返回：
+        return_pct, source
     """
     hk_code = normalize_hk_code(code)
     sina_symbol = "hk" + hk_code
@@ -1105,47 +1175,168 @@ def fetch_hk_return_pct_sina(code, retry=2, sleep_seconds=0.8):
             if not m:
                 raise RuntimeError(f"新浪港股返回格式异常: {text[:120]}")
 
-            values = m.group(1).split(",")
+            raw = m.group(1)
 
-            # 常见新浪港股字段存在百分比字段，但不同标的字段顺序可能不同。
-            # 这里只将其作为兜底，并尽量选择合理范围内的百分数。
-            numeric_values = []
-            for v in values:
-                fv = _to_float_safe(v)
-                if fv is not None:
-                    numeric_values.append(fv)
+            if not raw:
+                raise RuntimeError(f"新浪港股返回空内容: {hk_code}")
 
-            if len(numeric_values) < 4:
-                raise RuntimeError(f"新浪港股数值字段不足: len={len(numeric_values)}, raw={values[:12]}")
+            values = raw.split(",")
 
-            plausible_pct = [
-                x for x in numeric_values
-                if -30.0 <= x <= 30.0 and abs(x) > 0.000001
-            ]
+            if len(values) < 8:
+                raise RuntimeError(f"新浪港股字段数量不足: len={len(values)}, raw={values[:12]}")
 
-            if plausible_pct:
-                return float(plausible_pct[-1]), "sina_hk_realtime_guess"
+            # 新浪港股常见字段顺序：
+            # 0 名称
+            # 1 今日开盘价
+            # 2 昨日收盘价
+            # 3 最高价
+            # 4 最低价
+            # 5 当前价 / 最新价
+            #
+            # 这里不再读取或猜测“涨跌幅字段”，只用最新价和昨收价计算。
+            prev_close = _to_float_safe(values[2])
+            latest_price = _to_float_safe(values[5])
 
-            raise RuntimeError(f"新浪港股无法可靠解析涨跌幅: {values[:15]}")
+            if latest_price is None or prev_close is None:
+                raise RuntimeError(
+                    f"新浪港股价格字段解析失败: {hk_code}, "
+                    f"prev_close_raw={values[2] if len(values) > 2 else None}, "
+                    f"latest_raw={values[5] if len(values) > 5 else None}, "
+                    f"raw_head={values[:12]}"
+                )
+
+            if float(prev_close) <= 0 or float(latest_price) <= 0:
+                raise RuntimeError(
+                    f"新浪港股价格字段无效: {hk_code}, "
+                    f"latest={latest_price}, prev_close={prev_close}, raw_head={values[:12]}"
+                )
+
+            return_pct = (float(latest_price) / float(prev_close) - 1.0) * 100.0
+
+            # 防御性校验：超过 ±40% 时优先视为字段错位或异常返回。
+            if abs(return_pct) > 40:
+                raise RuntimeError(
+                    f"新浪港股计算涨跌幅异常: {hk_code}, "
+                    f"return_pct={return_pct:.4f}%, "
+                    f"latest={latest_price}, prev_close={prev_close}, raw_head={values[:12]}"
+                )
+
+            return return_pct, "sina_hk_realtime_price_calc"
 
         except Exception as e:
             last_error = e
+
             if i < max(1, retry) - 1:
                 time.sleep(sleep_seconds)
 
     raise RuntimeError(f"新浪港股行情失败: {hk_code}, 原因: {last_error}")
 
 
+def fetch_hk_return_pct_akshare_spot_em(code):
+    """
+    使用 AKShare 东方财富港股实时行情获取当日涨跌幅。
+
+    该函数只作为港股实时兜底源使用：
+        1. 新浪港股安全实时解析失败后，再尝试东方财富；
+        2. 东方财富失败后，再回落到 AKShare 港股历史日线。
+
+    逻辑：
+        1. 通过 ak.stock_hk_spot_em() 拉取港股实时行情表；
+        2. 按港股代码匹配；
+        3. 优先读取“涨跌幅”列；
+        4. 如果没有“涨跌幅”列，则用 最新价 / 昨收价 - 1 计算。
+
+    返回：
+        return_pct, source
+    """
+    global _HK_SPOT_EM_CACHE
+
+    hk_code = normalize_hk_code(code)
+
+    if _HK_SPOT_EM_CACHE is None:
+        _HK_SPOT_EM_CACHE = ak.stock_hk_spot_em()
+
+    df = _HK_SPOT_EM_CACHE
+
+    if df is None or df.empty:
+        raise RuntimeError("ak.stock_hk_spot_em 返回空数据")
+
+    row = _match_hk_row(df, hk_code)
+
+    if row is None:
+        raise RuntimeError(f"stock_hk_spot_em 未找到港股 {hk_code}; 当前列={list(df.columns)}")
+
+    pct_col = _pick_column(
+        df,
+        [
+            "涨跌幅",
+            "涨幅",
+            "changePercent",
+            "ChangePercent",
+            "pct_chg",
+            "change_percent",
+            "涨跌幅%",
+        ],
+    )
+
+    if pct_col is not None:
+        pct = _to_float_safe(row.get(pct_col))
+        if pct is not None:
+            return float(pct), "ak_stock_hk_spot_em"
+
+    price_col = _pick_column(
+        df,
+        [
+            "最新价",
+            "最新",
+            "现价",
+            "price",
+            "Price",
+            "last",
+            "Last",
+            "收盘价",
+        ],
+    )
+
+    prev_col = _pick_column(
+        df,
+        [
+            "昨收价",
+            "昨收",
+            "previousClose",
+            "PreviousClose",
+            "prev_close",
+            "昨收盘",
+        ],
+    )
+
+    if price_col is not None and prev_col is not None:
+        price = _to_float_safe(row.get(price_col))
+        prev = _to_float_safe(row.get(prev_col))
+
+        if price is not None and prev not in (None, 0):
+            return (float(price) / float(prev) - 1.0) * 100.0, "ak_stock_hk_spot_em_calc"
+
+    raise RuntimeError(
+        f"stock_hk_spot_em 无法解析港股 {hk_code} 涨跌幅；当前列={list(df.columns)}"
+    )
+
+
 def fetch_hk_return_pct(code, hk_realtime=False):
     """
-    获取港股最新交易日涨跌幅，返回百分数。
-
-    hk_realtime=False：
-        默认使用 AKShare 港股历史日线，避免全市场行情，速度相对稳定。
+    获取港股涨跌幅，返回百分数。
 
     hk_realtime=True：
-        先尝试新浪单只港股实时行情；
-        失败后回落到 AKShare 港股历史日线。
+        1. 优先使用新浪港股单只实时行情，并通过 最新价 / 昨收价 安全计算；
+        2. 新浪失败后，再使用东方财富港股实时行情作为最后一个实时兜底源；
+        3. 两个实时源都失败后，回落到 AKShare 港股历史日线。
+
+    hk_realtime=False：
+        只使用 AKShare 港股历史日线。
+
+    注意：
+        已彻底移除 sina_hk_realtime_guess。
+        新浪港股实时只允许通过价格字段计算，不允许猜测涨跌幅字段。
     """
     hk_code = normalize_hk_code(code)
     errors = []
@@ -1154,22 +1345,23 @@ def fetch_hk_return_pct(code, hk_realtime=False):
         try:
             return fetch_hk_return_pct_sina(hk_code)
         except Exception as e:
-            errors.append(f"sina_hk: {repr(e)}")
+            errors.append(f"sina_hk_price_calc: {repr(e)}")
+
+        try:
+            return fetch_hk_return_pct_akshare_spot_em(hk_code)
+        except Exception as e:
+            errors.append(f"ak_hk_spot_em: {repr(e)}")
 
         try:
             return fetch_hk_return_pct_akshare_daily(hk_code)
         except Exception as e:
             errors.append(f"ak_hk_daily: {repr(e)}")
+
     else:
         try:
             return fetch_hk_return_pct_akshare_daily(hk_code)
         except Exception as e:
             errors.append(f"ak_hk_daily: {repr(e)}")
-
-        try:
-            return fetch_hk_return_pct_sina(hk_code)
-        except Exception as e:
-            errors.append(f"sina_hk: {repr(e)}")
 
     raise RuntimeError(f"无法获取港股 {hk_code} 涨跌幅: {' | '.join(errors)}")
 
@@ -2772,7 +2964,7 @@ if __name__ == "__main__":
         holding_mode="auto", # 自动选择股票持仓或代理估算
         proxy_normalize_weights=False, # 代理按原始权重计算，现金按 0
         us_realtime=False,  # 如果开启实时数据，则会拉取所有的美股数据，耗时较长
-        hk_realtime=False,  # 港股默认使用日线；True 会先尝试新浪单只港股实时行情
+        hk_realtime=True,   # 港股优先使用东方财富实时行情；失败后回落到日线
         renormalize_available_holdings=True,  # 某些持仓行情缺失时，用可查持仓重新归一化估算
         include_purchase_limit=True,
         include_method_col=False,
@@ -2786,12 +2978,13 @@ if __name__ == "__main__":
 
     # ========================================================
     # 示例 2：盘中实时模式
-    # 美股会优先尝试新浪/东方财富实时行情，可能较慢。
+    # 港股实时优先；美股如无特殊需要仍建议保持日线。
     # ========================================================
     # estimate_funds_and_save_table(
     #     fund_codes=["017437", "007467", "015016", "007722"],
     #     output_file="output/fund_estimate_table_realtime.png",
-    #     us_realtime=True,
+    #     us_realtime=False,
+    #     hk_realtime=True,
     # )
 
     # ========================================================
