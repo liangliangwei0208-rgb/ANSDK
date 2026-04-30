@@ -3330,5 +3330,1048 @@
     "ticker": "002281",
     "return_pct": -3.014598540145985,
     "source": "sina_realtime"
+  },
+  "US:NVDA:2026-04-30": {
+    "fetched_at": "2026-04-30T16:40:41",
+    "market": "US",
+    "ticker": "NVDA",
+    "return_pct": -1.838907913871557,
+    "source": "ak_stock_us_daily"
+  },
+  "US:AAPL:2026-04-30": {
+    "fetched_at": "2026-04-30T16:40:42",
+    "market": "US",
+    "ticker": "AAPL",
+    "return_pct": -0.19947545343724782,
+    "source": "ak_stock_us_daily"
+  },
+  "US:GOOG:2026-04-30": {
+    "fetched_at": "2026-04-30T16:40:43",
+    "market": "US",
+    "ticker": "GOOG",
+    "return_pct": -0.05467625899280293,
+    "source": "ak_stock_us_daily"
+  },
+  "US:TSLA:2026-04-30": {
+    "fetched_at": "2026-04-30T16:40:44",
+    "market": "US",
+    "ticker": "TSLA",
+    "return_pct": -0.8563374288601544,
+    "source": "ak_stock_us_daily"
+  },
+  "US:MSFT:2026-04-30": {
+    "fetched_at": "2026-04-30T16:40:45",
+    "market": "US",
+    "ticker": "MSFT",
+    "return_pct": -1.115899825276645,
+    "source": "ak_stock_us_daily"
+  },
+  "US:AVGO:2026-04-30": {
+    "fetched_at": "2026-04-30T16:40:46",
+    "market": "US",
+    "ticker": "AVGO",
+    "return_pct": 1.395453522394785,
+    "source": "ak_stock_us_daily"
+  },
+  "US:AMZN:2026-04-30": {
+    "fetched_at": "2026-04-30T16:40:46",
+    "market": "US",
+    "ticker": "AMZN",
+    "return_pct": 1.2860993453985392,
+    "source": "ak_stock_us_daily"
+  },
+  "US:NFLX:2026-04-30": {
+    "fetched_at": "2026-04-30T16:40:48",
+    "market": "US",
+    "ticker": "NFLX",
+    "return_pct": -0.16256638127234435,
+    "source": "ak_stock_us_daily"
+  },
+  "US:META:2026-04-30": {
+    "fetched_at": "2026-04-30T16:40:48",
+    "market": "US",
+    "ticker": "META",
+    "return_pct": -0.33068191974260364,
+    "source": "ak_stock_us_daily"
+  },
+  "US:MRVL:2026-04-30": {
+    "fetched_at": "2026-04-30T16:40:49",
+    "market": "US",
+    "ticker": "MRVL",
+    "return_pct": 2.1797298179207836,
+    "source": "ak_stock_us_daily"
+  },
+  "US:TSM:2026-04-30": {
+    "fetched_at": "2026-04-30T16:40:50",
+    "market": "US",
+    "ticker": "TSM",
+    "return_pct": 0.3797726461742368,
+    "source": "ak_stock_us_daily"
+  },
+  "US:LITE:2026-04-30": {
+    "fetched_at": "2026-04-30T16:40:51",
+    "market": "US",
+    "ticker": "LITE",
+    "return_pct": 8.424390182282139,
+    "source": "ak_stock_us_daily"
+  },
+  "CN:300502:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:40:52",
+    "market": "CN",
+    "ticker": "300502",
+    "return_pct": -2.087523277467418,
+    "source": "sina_realtime"
+  },
+  "US:GLW:2026-04-30": {
+    "fetched_at": "2026-04-30T16:40:53",
+    "market": "US",
+    "ticker": "GLW",
+    "return_pct": -0.7513884351519118,
+    "source": "ak_stock_us_daily"
+  },
+  "US:AXTI:2026-04-30": {
+    "fetched_at": "2026-04-30T16:40:54",
+    "market": "US",
+    "ticker": "AXTI",
+    "return_pct": 3.4347256585649744,
+    "source": "ak_stock_us_daily"
+  },
+  "CN:300308:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:40:54",
+    "market": "CN",
+    "ticker": "300308",
+    "return_pct": 1.4792899408283988,
+    "source": "sina_realtime"
+  },
+  "CN:688498:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:40:55",
+    "market": "CN",
+    "ticker": "688498",
+    "return_pct": 3.6963696369636923,
+    "source": "sina_realtime"
+  },
+  "US:TSEM:2026-04-30": {
+    "fetched_at": "2026-04-30T16:40:56",
+    "market": "US",
+    "ticker": "TSEM",
+    "return_pct": 2.908809093257547,
+    "source": "ak_stock_us_daily"
+  },
+  "US:GOOGL:2026-04-30": {
+    "fetched_at": "2026-04-30T16:40:56",
+    "market": "US",
+    "ticker": "GOOGL",
+    "return_pct": 0.045743038481327325,
+    "source": "ak_stock_us_daily"
+  },
+  "CN:002384:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:40:57",
+    "market": "CN",
+    "ticker": "002384",
+    "return_pct": 1.3459972862957859,
+    "source": "sina_realtime"
+  },
+  "US:MU:2026-04-30": {
+    "fetched_at": "2026-04-30T16:40:57",
+    "market": "US",
+    "ticker": "MU",
+    "return_pct": 2.8241640553726466,
+    "source": "ak_stock_us_daily"
+  },
+  "US:AMD:2026-04-30": {
+    "fetched_at": "2026-04-30T16:40:58",
+    "market": "US",
+    "ticker": "AMD",
+    "return_pct": 4.294155864245264,
+    "source": "ak_stock_us_daily"
+  },
+  "CN:513030:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:40:59",
+    "market": "CN",
+    "ticker": "513030",
+    "return_pct": -0.3342618384401086,
+    "source": "sina_realtime"
+  },
+  "US:SPY:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:00",
+    "market": "US",
+    "ticker": "SPY",
+    "return_pct": -0.015456167713467917,
+    "source": "ak_stock_us_daily"
+  },
+  "US:CIEN:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:01",
+    "market": "US",
+    "ticker": "CIEN",
+    "return_pct": 0.3588845025227494,
+    "source": "ak_stock_us_daily"
+  },
+  "US:COHR:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:01",
+    "market": "US",
+    "ticker": "COHR",
+    "return_pct": 0.31582064019475276,
+    "source": "ak_stock_us_daily"
+  },
+  "US:VIAV:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:02",
+    "market": "US",
+    "ticker": "VIAV",
+    "return_pct": 5.466759323604364,
+    "source": "ak_stock_us_daily"
+  },
+  "US:SNDK:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:03",
+    "market": "US",
+    "ticker": "SNDK",
+    "return_pct": 6.171496982092095,
+    "source": "ak_stock_us_daily"
+  },
+  "US:AEIS:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:04",
+    "market": "US",
+    "ticker": "AEIS",
+    "return_pct": -2.017189491093452,
+    "source": "ak_stock_us_daily"
+  },
+  "US:TER:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:05",
+    "market": "US",
+    "ticker": "TER",
+    "return_pct": -19.41441085944282,
+    "source": "ak_stock_us_daily"
+  },
+  "US:LRCX:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:06",
+    "market": "US",
+    "ticker": "LRCX",
+    "return_pct": -0.9871432551844861,
+    "source": "ak_stock_us_daily"
+  },
+  "US:MKSI:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:07",
+    "market": "US",
+    "ticker": "MKSI",
+    "return_pct": -0.8257052120306252,
+    "source": "ak_stock_us_daily"
+  },
+  "US:TTMI:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:08",
+    "market": "US",
+    "ticker": "TTMI",
+    "return_pct": -0.06541173050367277,
+    "source": "ak_stock_us_daily"
+  },
+  "US:INTC:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:09",
+    "market": "US",
+    "ticker": "INTC",
+    "return_pct": 12.103644107903456,
+    "source": "ak_stock_us_daily"
+  },
+  "US:ASML:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:09",
+    "market": "US",
+    "ticker": "ASML",
+    "return_pct": 0.6759489283031828,
+    "source": "ak_stock_us_daily"
+  },
+  "HK:02513:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:10",
+    "market": "HK",
+    "ticker": "02513",
+    "return_pct": -5.000000000000004,
+    "source": "sina_hk_realtime_price_calc"
+  },
+  "US:KLAC:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:11",
+    "market": "US",
+    "ticker": "KLAC",
+    "return_pct": 0.4524261212479841,
+    "source": "ak_stock_us_daily"
+  },
+  "HK:09899:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:11",
+    "market": "HK",
+    "ticker": "09899",
+    "return_pct": -2.9661016949152574,
+    "source": "sina_hk_realtime_price_calc"
+  },
+  "HK:00522:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:12",
+    "market": "HK",
+    "ticker": "00522",
+    "return_pct": -3.413173652694601,
+    "source": "sina_hk_realtime_price_calc"
+  },
+  "CN:513880:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:17",
+    "market": "CN",
+    "ticker": "513880",
+    "return_pct": -0.6382978723404098,
+    "source": "sina_realtime"
+  },
+  "CN:300476:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:17",
+    "market": "CN",
+    "ticker": "300476",
+    "return_pct": -1.6114056369245455,
+    "source": "sina_realtime"
+  },
+  "US:WDC:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:22",
+    "market": "US",
+    "ticker": "WDC",
+    "return_pct": 5.567917338039341,
+    "source": "ak_stock_us_daily"
+  },
+  "US:MPWR:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:23",
+    "market": "US",
+    "ticker": "MPWR",
+    "return_pct": 1.565206007729203,
+    "source": "ak_stock_us_daily"
+  },
+  "US:LLY:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:24",
+    "market": "US",
+    "ticker": "LLY",
+    "return_pct": -2.6075514874141836,
+    "source": "ak_stock_us_daily"
+  },
+  "US:GEV:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:25",
+    "market": "US",
+    "ticker": "GEV",
+    "return_pct": -2.371143932930142,
+    "source": "ak_stock_us_daily"
+  },
+  "US:GE:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:26",
+    "market": "US",
+    "ticker": "GE",
+    "return_pct": -1.946749654218527,
+    "source": "ak_stock_us_daily"
+  },
+  "US:ONTO:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:28",
+    "market": "US",
+    "ticker": "ONTO",
+    "return_pct": 0.6905343673642816,
+    "source": "ak_stock_us_daily"
+  },
+  "US:AAOI:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:29",
+    "market": "US",
+    "ticker": "AAOI",
+    "return_pct": 11.343435815241154,
+    "source": "ak_stock_us_daily"
+  },
+  "HK:00981:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:30",
+    "market": "HK",
+    "ticker": "00981",
+    "return_pct": -0.5275056518462606,
+    "source": "sina_hk_realtime_price_calc"
+  },
+  "HK:01347:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:30",
+    "market": "HK",
+    "ticker": "01347",
+    "return_pct": -5.5045871559633035,
+    "source": "sina_hk_realtime_price_calc"
+  },
+  "US:TXN:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:31",
+    "market": "US",
+    "ticker": "TXN",
+    "return_pct": 1.5924528301886953,
+    "source": "ak_stock_us_daily"
+  },
+  "US:AMAT:2026-04-30": {
+    "fetched_at": "2026-04-30T16:41:32",
+    "market": "US",
+    "ticker": "AMAT",
+    "return_pct": 0.38833932460442533,
+    "source": "ak_stock_us_daily"
+  },
+  "HK:09988:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:33",
+    "market": "HK",
+    "ticker": "09988",
+    "return_pct": -1.716068642745705,
+    "source": "sina_hk_realtime_price_calc"
+  },
+  "CN:512890:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:34",
+    "market": "CN",
+    "ticker": "512890",
+    "return_pct": -0.5857740585774152,
+    "source": "sina_realtime"
+  },
+  "CN:513130:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:35",
+    "market": "CN",
+    "ticker": "513130",
+    "return_pct": -0.16233766233766378,
+    "source": "sina_realtime"
+  },
+  "CN:562060:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:35",
+    "market": "CN",
+    "ticker": "562060",
+    "return_pct": -0.911854103343468,
+    "source": "sina_realtime"
+  },
+  "HK:01801:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:36",
+    "market": "HK",
+    "ticker": "01801",
+    "return_pct": -0.4711425206124886,
+    "source": "sina_hk_realtime_price_calc"
+  },
+  "HK:01530:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:36",
+    "market": "HK",
+    "ticker": "01530",
+    "return_pct": -0.17969451931717506,
+    "source": "sina_hk_realtime_price_calc"
+  },
+  "HK:06990:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:37",
+    "market": "HK",
+    "ticker": "06990",
+    "return_pct": -0.04424778761061843,
+    "source": "sina_hk_realtime_price_calc"
+  },
+  "HK:09926:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:38",
+    "market": "HK",
+    "ticker": "09926",
+    "return_pct": -1.4587892049598872,
+    "source": "sina_hk_realtime_price_calc"
+  },
+  "HK:03692:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:38",
+    "market": "HK",
+    "ticker": "03692",
+    "return_pct": -0.4891304347826031,
+    "source": "sina_hk_realtime_price_calc"
+  },
+  "HK:09995:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:39",
+    "market": "HK",
+    "ticker": "09995",
+    "return_pct": -1.5984015984015887,
+    "source": "sina_hk_realtime_price_calc"
+  },
+  "HK:09606:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:39",
+    "market": "HK",
+    "ticker": "09606",
+    "return_pct": -2.9517638588912876,
+    "source": "sina_hk_realtime_price_calc"
+  },
+  "HK:01093:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:40",
+    "market": "HK",
+    "ticker": "01093",
+    "return_pct": -1.0856453558504175,
+    "source": "sina_hk_realtime_price_calc"
+  },
+  "HK:02162:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:41",
+    "market": "HK",
+    "ticker": "02162",
+    "return_pct": -0.677048070413,
+    "source": "sina_hk_realtime_price_calc"
+  },
+  "HK:01276:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:41",
+    "market": "HK",
+    "ticker": "01276",
+    "return_pct": -2.706766917293224,
+    "source": "sina_hk_realtime_price_calc"
+  },
+  "CN:159201:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:42",
+    "market": "CN",
+    "ticker": "159201",
+    "return_pct": -0.6033182503770718,
+    "source": "sina_realtime"
+  },
+  "CN:518600:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:42",
+    "market": "CN",
+    "ticker": "518600",
+    "return_pct": 0.39832702648876506,
+    "source": "sina_realtime"
+  },
+  "CN:688012:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:43",
+    "market": "CN",
+    "ticker": "688012",
+    "return_pct": 4.597509450744952,
+    "source": "sina_realtime"
+  },
+  "CN:688256:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:43",
+    "market": "CN",
+    "ticker": "688256",
+    "return_pct": 20.00028236024931,
+    "source": "sina_realtime"
+  },
+  "CN:688347:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:44",
+    "market": "CN",
+    "ticker": "688347",
+    "return_pct": 6.688861985472161,
+    "source": "sina_realtime"
+  },
+  "CN:688041:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:45",
+    "market": "CN",
+    "ticker": "688041",
+    "return_pct": 6.270402123614449,
+    "source": "sina_realtime"
+  },
+  "CN:688981:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:45",
+    "market": "CN",
+    "ticker": "688981",
+    "return_pct": 5.565928692095667,
+    "source": "sina_realtime"
+  },
+  "CN:603986:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:46",
+    "market": "CN",
+    "ticker": "603986",
+    "return_pct": 1.3273333549159938,
+    "source": "sina_realtime"
+  },
+  "CN:688008:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:46",
+    "market": "CN",
+    "ticker": "688008",
+    "return_pct": 2.0011771630370934,
+    "source": "sina_realtime"
+  },
+  "CN:002371:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:47",
+    "market": "CN",
+    "ticker": "002371",
+    "return_pct": 5.145777447083488,
+    "source": "sina_realtime"
+  },
+  "CN:600584:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:48",
+    "market": "CN",
+    "ticker": "600584",
+    "return_pct": 2.705139765554554,
+    "source": "sina_realtime"
+  },
+  "CN:688385:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:48",
+    "market": "CN",
+    "ticker": "688385",
+    "return_pct": -2.3526036436666176,
+    "source": "sina_realtime"
+  },
+  "CN:300750:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:49",
+    "market": "CN",
+    "ticker": "300750",
+    "return_pct": -2.0224719101123556,
+    "source": "sina_realtime"
+  },
+  "CN:300274:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:49",
+    "market": "CN",
+    "ticker": "300274",
+    "return_pct": -0.47801839646556266,
+    "source": "sina_realtime"
+  },
+  "CN:300059:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:50",
+    "market": "CN",
+    "ticker": "300059",
+    "return_pct": 0.49358341559722074,
+    "source": "sina_realtime"
+  },
+  "CN:300124:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:50",
+    "market": "CN",
+    "ticker": "300124",
+    "return_pct": 1.4943038911081397,
+    "source": "sina_realtime"
+  },
+  "CN:300498:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:51",
+    "market": "CN",
+    "ticker": "300498",
+    "return_pct": 1.985111662531014,
+    "source": "sina_realtime"
+  },
+  "CN:300058:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:52",
+    "market": "CN",
+    "ticker": "300058",
+    "return_pct": -1.552616446233468,
+    "source": "sina_realtime"
+  },
+  "CN:300394:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:52",
+    "market": "CN",
+    "ticker": "300394",
+    "return_pct": -1.1540068790382163,
+    "source": "sina_realtime"
+  },
+  "CN:300433:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:53",
+    "market": "CN",
+    "ticker": "300433",
+    "return_pct": -0.5034856700232293,
+    "source": "sina_realtime"
+  },
+  "CN:002463:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:53",
+    "market": "CN",
+    "ticker": "002463",
+    "return_pct": 0.5785448127083592,
+    "source": "sina_realtime"
+  },
+  "CN:300757:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:54",
+    "market": "CN",
+    "ticker": "300757",
+    "return_pct": -1.2737549148099547,
+    "source": "sina_realtime"
+  },
+  "CN:600105:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:55",
+    "market": "CN",
+    "ticker": "600105",
+    "return_pct": -2.1006463527239227,
+    "source": "sina_realtime"
+  },
+  "CN:301626:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:55",
+    "market": "CN",
+    "ticker": "301626",
+    "return_pct": 3.6382536382536523,
+    "source": "sina_realtime"
+  },
+  "CN:600988:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:56",
+    "market": "CN",
+    "ticker": "600988",
+    "return_pct": -2.263374485596714,
+    "source": "sina_realtime"
+  },
+  "CN:300136:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:56",
+    "market": "CN",
+    "ticker": "300136",
+    "return_pct": 6.771137878610678,
+    "source": "sina_realtime"
+  },
+  "CN:002008:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:57",
+    "market": "CN",
+    "ticker": "002008",
+    "return_pct": -2.535320301916011,
+    "source": "sina_realtime"
+  },
+  "CN:002738:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:57",
+    "market": "CN",
+    "ticker": "002738",
+    "return_pct": -0.5585980284775416,
+    "source": "sina_realtime"
+  },
+  "CN:300857:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:58",
+    "market": "CN",
+    "ticker": "300857",
+    "return_pct": -4.4412554733782255,
+    "source": "sina_realtime"
+  },
+  "CN:300450:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:59",
+    "market": "CN",
+    "ticker": "300450",
+    "return_pct": -1.0571582153735992,
+    "source": "sina_realtime"
+  },
+  "CN:002156:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:41:59",
+    "market": "CN",
+    "ticker": "002156",
+    "return_pct": 4.585858585858582,
+    "source": "sina_realtime"
+  },
+  "CN:000933:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:00",
+    "market": "CN",
+    "ticker": "000933",
+    "return_pct": -2.783661119515868,
+    "source": "sina_realtime"
+  },
+  "CN:301358:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:00",
+    "market": "CN",
+    "ticker": "301358",
+    "return_pct": -4.44859813084113,
+    "source": "sina_realtime"
+  },
+  "CN:002558:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:01",
+    "market": "CN",
+    "ticker": "002558",
+    "return_pct": -2.0590868397493245,
+    "source": "sina_realtime"
+  },
+  "CN:561910:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:02",
+    "market": "CN",
+    "ticker": "561910",
+    "return_pct": -0.8281573498964856,
+    "source": "sina_realtime"
+  },
+  "CN:603876:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:02",
+    "market": "CN",
+    "ticker": "603876",
+    "return_pct": 4.201680672268915,
+    "source": "sina_realtime"
+  },
+  "HK:02465:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:03",
+    "market": "HK",
+    "ticker": "02465",
+    "return_pct": -5.570776255707754,
+    "source": "sina_hk_realtime_price_calc"
+  },
+  "CN:300919:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:03",
+    "market": "CN",
+    "ticker": "300919",
+    "return_pct": -2.493880048959607,
+    "source": "sina_realtime"
+  },
+  "CN:300390:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:04",
+    "market": "CN",
+    "ticker": "300390",
+    "return_pct": 0.0,
+    "source": "sina_realtime"
+  },
+  "CN:001203:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:04",
+    "market": "CN",
+    "ticker": "001203",
+    "return_pct": 1.9688109161793532,
+    "source": "sina_realtime"
+  },
+  "CN:688170:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:05",
+    "market": "CN",
+    "ticker": "688170",
+    "return_pct": 3.086104006820123,
+    "source": "sina_realtime"
+  },
+  "CN:301662:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:06",
+    "market": "CN",
+    "ticker": "301662",
+    "return_pct": 5.0489913544668585,
+    "source": "sina_realtime"
+  },
+  "CN:688155:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:06",
+    "market": "CN",
+    "ticker": "688155",
+    "return_pct": 19.99768277140539,
+    "source": "sina_realtime"
+  },
+  "CN:002756:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:07",
+    "market": "CN",
+    "ticker": "002756",
+    "return_pct": 4.10501193317423,
+    "source": "sina_realtime"
+  },
+  "CN:688778:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:07",
+    "market": "CN",
+    "ticker": "688778",
+    "return_pct": -3.291940018744144,
+    "source": "sina_realtime"
+  },
+  "CN:600519:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:08",
+    "market": "CN",
+    "ticker": "600519",
+    "return_pct": -1.1690230307528804,
+    "source": "sina_realtime"
+  },
+  "CN:000858:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:09",
+    "market": "CN",
+    "ticker": "000858",
+    "return_pct": -1.281269066503976,
+    "source": "sina_realtime"
+  },
+  "CN:000568:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:09",
+    "market": "CN",
+    "ticker": "000568",
+    "return_pct": -1.6022805465447876,
+    "source": "sina_realtime"
+  },
+  "CN:600809:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:10",
+    "market": "CN",
+    "ticker": "600809",
+    "return_pct": 0.14670951515998176,
+    "source": "sina_realtime"
+  },
+  "CN:002304:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:10",
+    "market": "CN",
+    "ticker": "002304",
+    "return_pct": -1.1048613901165183,
+    "source": "sina_realtime"
+  },
+  "CN:000596:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:11",
+    "market": "CN",
+    "ticker": "000596",
+    "return_pct": -1.7590471827759968,
+    "source": "sina_realtime"
+  },
+  "CN:603369:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:11",
+    "market": "CN",
+    "ticker": "603369",
+    "return_pct": -1.2239020878329732,
+    "source": "sina_realtime"
+  },
+  "CN:603198:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:12",
+    "market": "CN",
+    "ticker": "603198",
+    "return_pct": -2.1627188465499603,
+    "source": "sina_realtime"
+  },
+  "CN:600702:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:13",
+    "market": "CN",
+    "ticker": "600702",
+    "return_pct": -1.1394101876675555,
+    "source": "sina_realtime"
+  },
+  "CN:603589:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:13",
+    "market": "CN",
+    "ticker": "603589",
+    "return_pct": -1.8106995884773713,
+    "source": "sina_realtime"
+  },
+  "CN:000333:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:14",
+    "market": "CN",
+    "ticker": "000333",
+    "return_pct": -0.2582708153978652,
+    "source": "sina_realtime"
+  },
+  "CN:002594:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:14",
+    "market": "CN",
+    "ticker": "002594",
+    "return_pct": -2.2960151802656537,
+    "source": "sina_realtime"
+  },
+  "CN:600660:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:15",
+    "market": "CN",
+    "ticker": "600660",
+    "return_pct": -0.8922558922558887,
+    "source": "sina_realtime"
+  },
+  "CN:601633:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:16",
+    "market": "CN",
+    "ticker": "601633",
+    "return_pct": -0.3007518796992459,
+    "source": "sina_realtime"
+  },
+  "CN:603129:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:16",
+    "market": "CN",
+    "ticker": "603129",
+    "return_pct": -0.46014492753622127,
+    "source": "sina_realtime"
+  },
+  "CN:159865:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:17",
+    "market": "CN",
+    "ticker": "159865",
+    "return_pct": 0.8169934640522847,
+    "source": "sina_realtime"
+  },
+  "CN:600487:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:17",
+    "market": "CN",
+    "ticker": "600487",
+    "return_pct": -2.4933214603739873,
+    "source": "sina_realtime"
+  },
+  "CN:688072:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:18",
+    "market": "CN",
+    "ticker": "688072",
+    "return_pct": 5.03457879953737,
+    "source": "sina_realtime"
+  },
+  "CN:159309:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:18",
+    "market": "CN",
+    "ticker": "159309",
+    "return_pct": 0.9138381201044377,
+    "source": "sina_realtime"
+  },
+  "CN:603019:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:19",
+    "market": "CN",
+    "ticker": "603019",
+    "return_pct": 2.809113028091126,
+    "source": "sina_realtime"
+  },
+  "CN:002415:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:20",
+    "market": "CN",
+    "ticker": "002415",
+    "return_pct": 4.251651824188452,
+    "source": "sina_realtime"
+  },
+  "CN:002230:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:20",
+    "market": "CN",
+    "ticker": "002230",
+    "return_pct": -0.5617977528089901,
+    "source": "sina_realtime"
+  },
+  "CN:603501:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:21",
+    "market": "CN",
+    "ticker": "603501",
+    "return_pct": -3.2385077271385065,
+    "source": "sina_realtime"
+  },
+  "CN:688521:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:21",
+    "market": "CN",
+    "ticker": "688521",
+    "return_pct": 19.998291109497156,
+    "source": "sina_realtime"
+  },
+  "CN:300442:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:22",
+    "market": "CN",
+    "ticker": "300442",
+    "return_pct": -1.5258735072976481,
+    "source": "sina_realtime"
+  },
+  "CN:600089:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:23",
+    "market": "CN",
+    "ticker": "600089",
+    "return_pct": -1.577981651376148,
+    "source": "sina_realtime"
+  },
+  "CN:601012:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:23",
+    "market": "CN",
+    "ticker": "601012",
+    "return_pct": -0.5438066465256797,
+    "source": "sina_realtime"
+  },
+  "CN:000100:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:24",
+    "market": "CN",
+    "ticker": "000100",
+    "return_pct": -1.1574074074074292,
+    "source": "sina_realtime"
+  },
+  "CN:605117:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:24",
+    "market": "CN",
+    "ticker": "605117",
+    "return_pct": 2.0321072952651953,
+    "source": "sina_realtime"
+  },
+  "CN:600438:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:25",
+    "market": "CN",
+    "ticker": "600438",
+    "return_pct": 0.2308136180034781,
+    "source": "sina_realtime"
+  },
+  "CN:300751:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:25",
+    "market": "CN",
+    "ticker": "300751",
+    "return_pct": 7.914709071196224,
+    "source": "sina_realtime"
+  },
+  "CN:601877:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:26",
+    "market": "CN",
+    "ticker": "601877",
+    "return_pct": 0.3987730061349559,
+    "source": "sina_realtime"
+  },
+  "CN:300724:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:27",
+    "market": "CN",
+    "ticker": "300724",
+    "return_pct": 2.4390243902439046,
+    "source": "sina_realtime"
+  },
+  "CN:601138:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:27",
+    "market": "CN",
+    "ticker": "601138",
+    "return_pct": -5.101116812556594,
+    "source": "sina_realtime"
+  },
+  "CN:000063:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:28",
+    "market": "CN",
+    "ticker": "000063",
+    "return_pct": 0.7688083470620555,
+    "source": "sina_realtime"
+  },
+  "CN:600522:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:28",
+    "market": "CN",
+    "ticker": "600522",
+    "return_pct": -3.3838973162193753,
+    "source": "sina_realtime"
+  },
+  "CN:600498:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:29",
+    "market": "CN",
+    "ticker": "600498",
+    "return_pct": -9.359223300970875,
+    "source": "sina_realtime"
+  },
+  "CN:002281:2026-04-30-16": {
+    "fetched_at": "2026-04-30T16:42:30",
+    "market": "CN",
+    "ticker": "002281",
+    "return_pct": 8.587341010009775,
+    "source": "sina_realtime"
   }
 }
