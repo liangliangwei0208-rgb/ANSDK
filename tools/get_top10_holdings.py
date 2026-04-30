@@ -9,7 +9,8 @@ get_top10_holdings.py
 ========
 1. 普通股票型 / QDII 股票型基金
    - 从 ak.fund_portfolio_hold_em() 获取最近披露前 N 大股票持仓；
-   - 将前 N 大持仓权重归一化到 100%；
+   - 默认将前 N 大持仓权重归一化到 100%；
+   - 海外表可启用“有效持仓增强 + 失败持仓/未披露仓位纳斯达克100补偿”口径；
    - 按股票最新交易日涨跌幅估算；
    - 新增支持港股持仓，港股代码自动识别为 HK 市场。
 
@@ -59,10 +60,9 @@ result_df, detail_map = estimate_funds_and_save_table(
 4. QDII 基金会受汇率、估值时点、现金仓位、费用、申赎等影响；本模块只做近似估算。
 5. 限购金额来自公开网页文本解析，可能返回“未知”。
 6. 本版本新增 JSON 文件缓存：
-   - 基金持仓按季度披露窗口更新：1/4/7/10 月 20 日至次月 10 日内，每只基金最多约每 3 天试探一次；已经拿到目标季度持仓后停止请求，直到下一季度披露窗口；
+   - 基金持仓默认 75 天更新一次；
    - 限购金额默认 7 天更新一次；
    - CN/HK 行情默认小时级缓存，US 行情默认日级缓存。
-7. 港股实时行情顺序：新浪单只港股安全价格解析优先，东方财富港股实时作为兜底，最后回落到港股历史日线。
 """
 
 import re
@@ -72,6 +72,7 @@ import requests
 import akshare as ak
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.offsetbox import AnchoredOffsetbox, HPacker, TextArea
 
 from pathlib import Path
 from io import StringIO
@@ -89,6 +90,10 @@ SECURITY_RETURN_CACHE_FILE = "security_return_cache.json"
 
 _SECURITY_RETURN_RUNTIME_CACHE = {}
 
+# 海外股票持仓型基金：有效已披露持仓的人工放大系数。
+# 1.50 表示把“行情有效的已披露持仓股占净值比例”放大 50%，
+# 同时从纳斯达克100补偿仓位中扣除对应权重，保持总估算权重不超过 100%。
+OVERSEAS_VALID_HOLDING_BOOST = 1.50
 
 def _cache_log(message: str) -> None:
     """统一缓存日志输出，便于在 GitHub Actions 中定位。"""
@@ -146,7 +151,7 @@ def _is_cache_fresh(fetched_at, max_age_days=None, max_age_hours=None) -> bool:
     判断缓存是否仍在有效期内。
 
     max_age_days:
-        日级有效期，例如限购 7 天。基金持仓当前按季度披露窗口策略更新。
+        日级有效期，例如基金持仓 75 天、限购 7 天。
     max_age_hours:
         小时级有效期，例如 A股/港股盘中行情 1-2 小时。
     """
@@ -921,6 +926,78 @@ def format_pct(value, digits=4):
     return f"{float(value):+.{digits}f}%"
 
 
+def _normalize_valuation_mode(valuation_mode):
+    """
+    统一估值口径。
+
+    intraday:
+        A股/港股尽量使用盘中实时；美股默认使用最新完整交易日日线。
+    last_close:
+        A股、港股、美股全部使用最新完整交易日日线。
+        适合 QDII / 全球投资基金，避免把昨夜美股和今日 A/H 盘中混在一起。
+    auto:
+        股票持仓估算时按持仓市场自动判断：
+        - 含 US 持仓：使用 last_close；
+        - 不含 US 且为 CN/HK 持仓：使用 intraday。
+        这样纯港股基金继续走港股实时，全球跨市场基金走统一收盘口径。
+    """
+    mode = str(valuation_mode or "intraday").strip().lower()
+    aliases = {
+        "realtime": "intraday",
+        "real_time": "intraday",
+        "live": "intraday",
+        "t+0": "intraday",
+        "close": "last_close",
+        "daily": "last_close",
+        "lastclose": "last_close",
+        "last_close": "last_close",
+        "t+1": "last_close",
+        "automatic": "auto",
+        "smart": "auto",
+    }
+    mode = aliases.get(mode, mode)
+    if mode not in {"intraday", "last_close", "auto"}:
+        raise ValueError("valuation_mode 只能是 'intraday'、'last_close' 或 'auto'")
+    return mode
+
+
+def _resolve_auto_valuation_mode_from_markets(markets):
+    """
+    根据持仓市场决定 auto 估值口径。
+
+    规则：
+        - 只要含 US，就使用 last_close，避免美股收盘和 A/H 盘中混算；
+        - 不含 US 的 CN/HK 组合使用 intraday；
+        - UNKNOWN 不改变判断，尽量由可识别市场决定。
+    """
+    market_set = {str(x).strip().upper() for x in markets if str(x).strip()}
+    if "US" in market_set:
+        return "last_close"
+    return "intraday"
+
+
+def _component_market_type(component):
+    """
+    从代理组件 type 推断市场。
+    """
+    ctype = str(component.get("type", "")).strip().lower()
+    if ctype in {"us_ticker", "us_stock", "us_etf"}:
+        return "US"
+    if ctype in {"hk_stock", "hk_etf", "hk_security"}:
+        return "HK"
+    if ctype in {"cn_etf", "cn_stock", "cn_security", "cn_fund"}:
+        return "CN"
+    return "UNKNOWN"
+
+
+def _resolve_auto_valuation_mode_from_components(components):
+    """
+    根据代理组件市场决定 auto 估值口径。
+    """
+    return _resolve_auto_valuation_mode_from_markets(
+        [_component_market_type(x) for x in components]
+    )
+
 # ============================================================
 # 4. 行情接口
 # ============================================================
@@ -1002,6 +1079,81 @@ def fetch_cn_security_return_pct(code, retry=2, sleep_seconds=0.8):
                 time.sleep(sleep_seconds)
 
     raise RuntimeError(f"新浪行情失败: {code}, 原因: {last_error}")
+
+
+def fetch_cn_security_return_pct_daily(code, lookback_days=90):
+    """
+    获取 A股 / A股ETF / 场内基金最新完整交易日日线涨跌幅，返回百分数。
+
+    valuation_mode="last_close" 使用此函数，避免跨市场基金把昨夜美股和今日 A/H 盘中行情混在一起。
+    """
+    code = str(code).strip().zfill(6)
+    end_date = datetime.now().strftime("%Y%m%d")
+    start_date = (datetime.now() - timedelta(days=int(lookback_days))).strftime("%Y%m%d")
+
+    errors = []
+    frames = []
+
+    try:
+        df = ak.fund_etf_hist_em(
+            symbol=code,
+            period="daily",
+            start_date=start_date,
+            end_date=end_date,
+            adjust="",
+        )
+        if df is not None and not df.empty:
+            frames.append((df, "ak_fund_etf_hist_em"))
+    except Exception as e:
+        errors.append(f"fund_etf_hist_em: {repr(e)}")
+
+    try:
+        df = ak.stock_zh_a_hist(
+            symbol=code,
+            period="daily",
+            start_date=start_date,
+            end_date=end_date,
+            adjust="",
+        )
+        if df is not None and not df.empty:
+            frames.append((df, "ak_stock_zh_a_hist"))
+    except Exception as e:
+        errors.append(f"stock_zh_a_hist: {repr(e)}")
+
+    if not frames:
+        raise RuntimeError(f"A股/场内基金日线返回空数据: {code}; {' | '.join(errors)}")
+
+    for raw_df, source_name in frames:
+        out = raw_df.copy()
+        date_col = _pick_column(out, ["日期", "date", "Date"])
+        close_col = _pick_column(out, ["收盘", "close", "Close", "收盘价"])
+        pct_col = _pick_column(out, ["涨跌幅", "涨幅", "pct_chg", "change_percent", "ChangePercent"])
+
+        if date_col is not None:
+            out[date_col] = pd.to_datetime(out[date_col], errors="coerce")
+            out = out.dropna(subset=[date_col]).sort_values(date_col)
+
+        if out.empty:
+            continue
+
+        if pct_col is not None:
+            pct_series = pd.to_numeric(out[pct_col], errors="coerce").dropna()
+            if not pct_series.empty:
+                return float(pct_series.iloc[-1]), f"{source_name}_pct"
+
+        if close_col is None:
+            continue
+
+        out[close_col] = pd.to_numeric(out[close_col], errors="coerce")
+        out = out.dropna(subset=[close_col])
+
+        if len(out) >= 2:
+            last_close = float(out.iloc[-1][close_col])
+            prev_close = float(out.iloc[-2][close_col])
+            if prev_close != 0:
+                return (last_close / prev_close - 1.0) * 100.0, f"{source_name}_close_calc"
+
+    raise RuntimeError(f"无法解析 A股/场内基金 {code} 日线涨跌幅; {' | '.join(errors)}")
 
 
 def fetch_hk_return_pct_akshare_daily(code, lookback_days=90):
@@ -1225,16 +1377,10 @@ def fetch_hk_return_pct_sina(code, retry=2, sleep_seconds=0.8):
     使用新浪港股单只股票实时行情获取涨跌幅。
 
     安全逻辑：
-        - 不再使用字段猜测；
-        - 只使用明确的价格字段计算：最新价 / 昨收价 - 1；
+        - 不使用字段猜测；
+        - 只使用明确价格字段计算：最新价 / 昨收价 - 1；
         - 如果 latest / prev_close 不能可靠解析，直接失败；
         - 上游 fetch_hk_return_pct() 再尝试东方财富实时与港股日线兜底。
-
-    新浪港股接口示例：
-        https://hq.sinajs.cn/list=hk00700
-
-    返回：
-        return_pct, source
     """
     hk_code = normalize_hk_code(code)
     sina_symbol = "hk" + hk_code
@@ -1273,14 +1419,7 @@ def fetch_hk_return_pct_sina(code, retry=2, sleep_seconds=0.8):
                 raise RuntimeError(f"新浪港股字段数量不足: len={len(values)}, raw={values[:12]}")
 
             # 新浪港股常见字段顺序：
-            # 0 名称
-            # 1 今日开盘价
-            # 2 昨日收盘价
-            # 3 最高价
-            # 4 最低价
-            # 5 当前价 / 最新价
-            #
-            # 这里不读取或猜测“涨跌幅字段”，只用最新价和昨收价计算。
+            # 0 名称；1 今日开盘价；2 昨日收盘价；3 最高价；4 最低价；5 当前价 / 最新价。
             prev_close = _to_float_safe(values[2])
             latest_price = _to_float_safe(values[5])
 
@@ -1300,7 +1439,6 @@ def fetch_hk_return_pct_sina(code, retry=2, sleep_seconds=0.8):
 
             return_pct = (float(latest_price) / float(prev_close) - 1.0) * 100.0
 
-            # 防御性校验：超过 ±40% 时优先视为字段错位或异常返回。
             if abs(return_pct) > 40:
                 raise RuntimeError(
                     f"新浪港股计算涨跌幅异常: {hk_code}, "
@@ -1312,7 +1450,6 @@ def fetch_hk_return_pct_sina(code, retry=2, sleep_seconds=0.8):
 
         except Exception as e:
             last_error = e
-
             if i < max(1, retry) - 1:
                 time.sleep(sleep_seconds)
 
@@ -1324,16 +1461,9 @@ def fetch_hk_return_pct(code, hk_realtime=False):
     获取港股涨跌幅，返回百分数。
 
     hk_realtime=True：
-        1. 优先使用新浪港股单只实时行情，并通过 最新价 / 昨收价 安全计算；
-        2. 新浪失败后，再使用东方财富港股实时行情作为实时兜底源；
-        3. 两个实时源都失败后，回落到 AKShare 港股历史日线。
-
+        新浪港股实时安全解析 -> 东方财富港股实时兜底 -> 港股历史日线兜底。
     hk_realtime=False：
-        只使用 AKShare 港股历史日线。
-
-    注意：
-        已彻底移除 sina_hk_realtime_guess。
-        新浪港股实时只允许通过价格字段计算，不允许猜测涨跌幅字段。
+        只使用港股历史日线。
     """
     hk_code = normalize_hk_code(code)
     errors = []
@@ -1361,6 +1491,26 @@ def fetch_hk_return_pct(code, hk_realtime=False):
             errors.append(f"ak_hk_daily: {repr(e)}")
 
     raise RuntimeError(f"无法获取港股 {hk_code} 涨跌幅: {' | '.join(errors)}")
+
+
+def fetch_hk_return_pct_last_close_with_fallback(code):
+    """
+    港股统一收盘口径的安全获取。
+
+    优先使用港股历史日线；如日线接口异常，为避免整只基金失败，
+    允许回退到港股实时安全解析，并在 source 中标记 fallback_intraday。
+    """
+    hk_code = normalize_hk_code(code)
+    try:
+        return fetch_hk_return_pct_akshare_daily(hk_code)
+    except Exception as e_daily:
+        try:
+            r_pct, source = fetch_hk_return_pct(hk_code, hk_realtime=True)
+            return r_pct, f"{source}_fallback_intraday_after_daily_fail"
+        except Exception as e_rt:
+            raise RuntimeError(
+                f"港股 {hk_code} 日线和实时兜底均失败: daily={e_daily}; realtime={e_rt}"
+            )
 
 def fetch_us_return_pct_akshare_daily(ticker):
     """
@@ -1560,17 +1710,18 @@ def get_stock_return_pct(
     hk_realtime=False,
     security_return_cache_enabled=True,
     cn_hk_hourly_cache=True,
+    valuation_mode="intraday",
 ):
     """
     根据 market 自动选择行情接口，并对行情涨跌幅做缓存。
 
-    缓存 key 规则：
-        CN/HK：小时级 key，例如 CN:512890:2026-04-29-13；
-               适合 A股交易日盘中预估收益。
-        US   ：日级 key，例如 US:NVDA:2026-04-29；
-               北京时间运行时美股通常已经收盘，不需要小时级刷新。
+    valuation_mode:
+        intraday：A股/港股使用盘中实时；美股默认用最新完整日线。
+        last_close：A股、港股、美股全部使用最新完整交易日日线。
+                    适合 QDII / 全球投资基金 T+1 估值口径。
     """
     market = str(market).strip().upper()
+    valuation_mode = _normalize_valuation_mode(valuation_mode)
     key = str(ticker).strip().upper()
 
     if manual_returns_pct:
@@ -1584,11 +1735,13 @@ def get_stock_return_pct(
     max_age_hours = None
 
     if security_return_cache_enabled:
+        effective_cn_hk_hourly_cache = cn_hk_hourly_cache and valuation_mode == "intraday"
         cache_key, ticker_norm, max_age_hours = _security_return_cache_key(
             market=market,
             ticker=ticker,
-            cn_hk_hourly_cache=cn_hk_hourly_cache,
+            cn_hk_hourly_cache=effective_cn_hk_hourly_cache,
         )
+        cache_key = f"{cache_key}:{valuation_mode}"
 
         if cache_key in _SECURITY_RETURN_RUNTIME_CACHE:
             _cache_log(f"使用本轮内存行情缓存: {cache_key}")
@@ -1609,23 +1762,37 @@ def get_stock_return_pct(
     if ticker_norm is None:
         ticker_norm = _normalize_security_cache_ticker(market, ticker)
 
-    _cache_log(f"重新获取行情: {market}:{ticker_norm}")
+    _cache_log(f"重新获取行情: {market}:{ticker_norm} [{valuation_mode}]")
 
-    if market == "US":
-        result = fetch_us_return_pct(
-            ticker_norm,
-            prefer_intraday=prefer_intraday,
-            us_realtime=us_realtime,
-        )
-    elif market == "CN":
-        result = fetch_cn_security_return_pct(str(ticker_norm).zfill(6))
-    elif market == "HK":
-        result = fetch_hk_return_pct(
-            ticker_norm,
-            hk_realtime=hk_realtime,
-        )
+    if valuation_mode == "last_close":
+        if market == "US":
+            result = fetch_us_return_pct_akshare_daily(ticker_norm)
+        elif market == "CN":
+            try:
+                result = fetch_cn_security_return_pct_daily(str(ticker_norm).zfill(6))
+            except Exception:
+                r_pct, source = fetch_cn_security_return_pct(str(ticker_norm).zfill(6))
+                result = (r_pct, f"{source}_fallback_intraday_after_daily_fail")
+        elif market == "HK":
+            result = fetch_hk_return_pct_last_close_with_fallback(ticker_norm)
+        else:
+            raise RuntimeError(f"未知市场类型: market={market}, ticker={ticker}")
     else:
-        raise RuntimeError(f"未知市场类型: market={market}, ticker={ticker}")
+        if market == "US":
+            result = fetch_us_return_pct(
+                ticker_norm,
+                prefer_intraday=prefer_intraday,
+                us_realtime=us_realtime,
+            )
+        elif market == "CN":
+            result = fetch_cn_security_return_pct(str(ticker_norm).zfill(6))
+        elif market == "HK":
+            result = fetch_hk_return_pct(
+                ticker_norm,
+                hk_realtime=hk_realtime,
+            )
+        else:
+            raise RuntimeError(f"未知市场类型: market={market}, ticker={ticker}")
 
     if security_return_cache_enabled and cache_key:
         r_pct, source = result
@@ -1636,6 +1803,7 @@ def get_stock_return_pct(
             "ticker": ticker_norm,
             "return_pct": float(r_pct),
             "source": source,
+            "valuation_mode": valuation_mode,
         }
         _save_json_cache(SECURITY_RETURN_CACHE_FILE, cache)
         _SECURITY_RETURN_RUNTIME_CACHE[cache_key] = result
@@ -1651,6 +1819,7 @@ def get_proxy_return_pct(
     hk_realtime=False,
     security_return_cache_enabled=True,
     cn_hk_hourly_cache=True,
+    valuation_mode="intraday",
 ):
     """
     获取 ETF 联接 / FOF 代理资产涨跌幅。
@@ -1689,6 +1858,7 @@ def get_proxy_return_pct(
             hk_realtime=hk_realtime,
             security_return_cache_enabled=security_return_cache_enabled,
             cn_hk_hourly_cache=cn_hk_hourly_cache,
+            valuation_mode=valuation_mode,
         )
 
     if ctype in {"us_ticker", "us_stock", "us_etf"}:
@@ -1701,6 +1871,7 @@ def get_proxy_return_pct(
             hk_realtime=hk_realtime,
             security_return_cache_enabled=security_return_cache_enabled,
             cn_hk_hourly_cache=cn_hk_hourly_cache,
+            valuation_mode=valuation_mode,
         )
 
     if ctype in {"hk_stock", "hk_etf", "hk_security"}:
@@ -1713,6 +1884,7 @@ def get_proxy_return_pct(
             hk_realtime=hk_realtime,
             security_return_cache_enabled=security_return_cache_enabled,
             cn_hk_hourly_cache=cn_hk_hourly_cache,
+            valuation_mode=valuation_mode,
         )
 
     if ctype in {"us_index", "eu_index", "index", "fx"}:
@@ -1798,274 +1970,110 @@ def get_latest_stock_holdings_df_uncached(fund_code="017437", top_n=10):
     return latest_df
 
 
-# ============================================================
-# 5.1 基金持仓季度披露窗口缓存策略
-# ============================================================
 
-HOLDING_DISCLOSURE_PROBE_DAYS = 3
-
-
-def _holding_quarter_info_from_df(df: pd.DataFrame):
+def _target_holding_quarter_key_for_now(now=None):
     """
-    从持仓 DataFrame 中提取最新持仓季度。
+    返回当前是否处于基金季报持仓披露试探窗口，以及本轮目标季度。
+
+    窗口：
+        Q4：1月20日 - 2月10日，目标上一年Q4
+        Q1：4月20日 - 5月10日，目标当年Q1
+        Q2：7月20日 - 8月10日，目标当年Q2
+        Q3：10月20日 - 11月10日，目标当年Q3
 
     返回：
-        latest_quarter_key, latest_quarter_label
-
-    quarter_key 形式：
-        20261 表示 2026 年 1 季度；
-        20254 表示 2025 年 4 季度。
-    """
-    if df is None or df.empty or "季度" not in df.columns:
-        return None, ""
-
-    tmp = df.copy()
-    tmp["_quarter_key_for_cache"] = tmp["季度"].apply(quarter_key)
-    tmp = tmp[tmp["_quarter_key_for_cache"] >= 0]
-
-    if tmp.empty:
-        return None, ""
-
-    latest_key = int(tmp["_quarter_key_for_cache"].max())
-    labels = tmp.loc[tmp["_quarter_key_for_cache"] == latest_key, "季度"].dropna().astype(str)
-    label = labels.iloc[0] if not labels.empty else ""
-
-    return latest_key, label
-
-
-def _get_cached_holding_quarter_info(item: dict):
-    """
-    从缓存 item 中读取持仓季度；兼容旧缓存结构。
-    """
-    if not isinstance(item, dict):
-        return None, ""
-
-    q_key = item.get("latest_quarter_key")
-    q_label = str(item.get("latest_quarter_label") or "")
-
-    try:
-        if q_key is not None:
-            return int(q_key), q_label
-    except Exception:
-        pass
-
-    data_json = item.get("data_json")
-    if not data_json:
-        return None, q_label
-
-    try:
-        df = _df_from_cache_json(data_json)
-        return _holding_quarter_info_from_df(df)
-    except Exception:
-        return None, q_label
-
-
-def _holding_target_quarter_key_for_window(now=None):
-    """
-    返回当前披露窗口对应的目标持仓季度。
-
-    披露试探窗口：
-        1 月 20 日 - 2 月 10 日：上一年 4 季度
-        4 月 20 日 - 5 月 10 日：本年 1 季度
-        7 月 20 日 - 8 月 10 日：本年 2 季度
-        10 月 20 日 - 11 月 10 日：本年 3 季度
-
-    不在披露试探窗口时返回 None。
+        target_key, window_end
+        不在窗口时 target_key=None。
     """
     if now is None:
         now = datetime.now()
 
-    year = int(now.year)
-    month = int(now.month)
-    day = int(now.day)
+    y, m, d = now.year, now.month, now.day
 
-    if month == 1 and day >= 20:
-        return (year - 1) * 10 + 4
-    if month == 2 and day <= 10:
-        return (year - 1) * 10 + 4
+    if m == 1 and d >= 20:
+        return (y - 1) * 10 + 4, datetime(y, 2, 10, 23, 59, 59)
+    if m == 2 and d <= 10:
+        return (y - 1) * 10 + 4, datetime(y, 2, 10, 23, 59, 59)
 
-    if month == 4 and day >= 20:
-        return year * 10 + 1
-    if month == 5 and day <= 10:
-        return year * 10 + 1
+    if m == 4 and d >= 20:
+        return y * 10 + 1, datetime(y, 5, 10, 23, 59, 59)
+    if m == 5 and d <= 10:
+        return y * 10 + 1, datetime(y, 5, 10, 23, 59, 59)
 
-    if month == 7 and day >= 20:
-        return year * 10 + 2
-    if month == 8 and day <= 10:
-        return year * 10 + 2
+    if m == 7 and d >= 20:
+        return y * 10 + 2, datetime(y, 8, 10, 23, 59, 59)
+    if m == 8 and d <= 10:
+        return y * 10 + 2, datetime(y, 8, 10, 23, 59, 59)
 
-    if month == 10 and day >= 20:
-        return year * 10 + 3
-    if month == 11 and day <= 10:
-        return year * 10 + 3
+    if m == 10 and d >= 20:
+        return y * 10 + 3, datetime(y, 11, 10, 23, 59, 59)
+    if m == 11 and d <= 10:
+        return y * 10 + 3, datetime(y, 11, 10, 23, 59, 59)
 
-    return None
+    return None, None
 
 
 def _next_holding_disclosure_window_start(now=None):
     """
-    返回下一轮基金持仓披露试探窗口的开始时间。
+    返回下一次基金持仓披露试探窗口开始时间。
     """
     if now is None:
         now = datetime.now()
 
-    year = int(now.year)
+    y = now.year
     candidates = [
-        datetime(year, 1, 20),
-        datetime(year, 4, 20),
-        datetime(year, 7, 20),
-        datetime(year, 10, 20),
-        datetime(year + 1, 1, 20),
+        datetime(y, 1, 20),
+        datetime(y, 4, 20),
+        datetime(y, 7, 20),
+        datetime(y, 10, 20),
+        datetime(y + 1, 1, 20),
     ]
-
-    for candidate in candidates:
-        if candidate > now:
-            return candidate
-
-    return datetime(year + 1, 1, 20)
+    for dt in candidates:
+        if dt > now:
+            return dt
+    return datetime(y + 1, 1, 20)
 
 
-def _parse_iso_datetime(value):
+def _holding_cache_item_to_df(item):
     """
-    解析缓存中的 ISO 时间字符串；失败时返回 None。
+    尝试从基金持仓缓存项恢复 DataFrame。
     """
-    if not value:
+    if not isinstance(item, dict) or not item.get("data_json"):
         return None
-
     try:
-        t = pd.to_datetime(value)
-    except Exception:
+        return _df_from_cache_json(item["data_json"])
+    except Exception as e:
+        print(f"[WARN] 基金持仓缓存损坏，将重新获取: {e}", flush=True)
         return None
 
-    if pd.isna(t):
-        return None
 
-    try:
-        return t.to_pydatetime().replace(tzinfo=None)
-    except Exception:
+def _holding_df_quarter_meta(df):
+    """
+    从持仓 DataFrame 中提取最新季度 key 和 label。
+    """
+    if df is None or df.empty:
+        return None, None
+
+    qkey = None
+    qlabel = None
+
+    if "_quarter_key" in df.columns:
         try:
-            return t.tz_localize(None).to_pydatetime()
+            vals = pd.to_numeric(df["_quarter_key"], errors="coerce").dropna()
+            if not vals.empty:
+                qkey = int(vals.iloc[0])
         except Exception:
-            return None
+            qkey = None
 
+    if "季度" in df.columns and not df["季度"].empty:
+        try:
+            qlabel = str(df["季度"].iloc[0])
+            if qkey is None:
+                qkey = quarter_key(qlabel)
+        except Exception:
+            pass
 
-def _is_next_check_due(item: dict, now=None) -> bool:
-    """
-    判断是否已到下一次持仓刷新试探时间。
-    """
-    if now is None:
-        now = datetime.now()
-
-    if not isinstance(item, dict):
-        return True
-
-    next_check_after = _parse_iso_datetime(item.get("next_check_after"))
-
-    if next_check_after is None:
-        return True
-
-    return now >= next_check_after
-
-
-def _holding_next_probe_time(now=None, days=HOLDING_DISCLOSURE_PROBE_DAYS) -> str:
-    """
-    披露窗口内下一次试探时间。默认 3 天后。
-    """
-    if now is None:
-        now = datetime.now()
-
-    return (now + timedelta(days=int(days))).isoformat(timespec="seconds")
-
-
-def _build_holding_cache_item(
-    fund_code: str,
-    top_n: int,
-    df: pd.DataFrame,
-    target_quarter_key,
-    now=None,
-    previous_item: dict | None = None,
-) -> dict:
-    """
-    构造基金持仓缓存 item。
-    """
-    if now is None:
-        now = datetime.now()
-
-    latest_quarter_key, latest_quarter_label = _holding_quarter_info_from_df(df)
-    target_confirmed = bool(
-        target_quarter_key is not None
-        and latest_quarter_key is not None
-        and int(latest_quarter_key) >= int(target_quarter_key)
-    )
-
-    if target_confirmed:
-        next_check_after = _next_holding_disclosure_window_start(now).isoformat(timespec="seconds")
-    elif target_quarter_key is not None:
-        next_check_after = _holding_next_probe_time(now)
-    else:
-        next_check_after = _next_holding_disclosure_window_start(now).isoformat(timespec="seconds")
-
-    item = {
-        "fetched_at": now.isoformat(timespec="seconds"),
-        "last_checked_at": now.isoformat(timespec="seconds"),
-        "next_check_after": next_check_after,
-        "fund_code": str(fund_code).zfill(6),
-        "top_n": int(top_n),
-        "latest_quarter_label": latest_quarter_label,
-        "latest_quarter_key": latest_quarter_key,
-        "target_quarter_key": target_quarter_key,
-        "target_quarter_confirmed": target_confirmed,
-        "data_json": _df_to_cache_json(df),
-    }
-
-    if isinstance(previous_item, dict):
-        for k in ["last_error", "last_error_at"]:
-            if k in previous_item and k not in item:
-                item[k] = previous_item[k]
-
-    return item
-
-
-def _mark_holding_probe_failed(
-    item: dict,
-    error,
-    target_quarter_key,
-    now=None,
-) -> dict:
-    """
-    远程持仓刷新失败时，不覆盖旧 data_json，只记录失败时间和下一次试探时间。
-    """
-    if now is None:
-        now = datetime.now()
-
-    new_item = dict(item)
-    cached_q_key, cached_q_label = _get_cached_holding_quarter_info(new_item)
-
-    new_item["last_checked_at"] = now.isoformat(timespec="seconds")
-    new_item["last_error_at"] = now.isoformat(timespec="seconds")
-    new_item["last_error"] = repr(error)
-    new_item["target_quarter_key"] = target_quarter_key
-
-    if cached_q_key is not None:
-        new_item["latest_quarter_key"] = int(cached_q_key)
-    if cached_q_label:
-        new_item["latest_quarter_label"] = cached_q_label
-
-    target_confirmed = bool(
-        target_quarter_key is not None
-        and cached_q_key is not None
-        and int(cached_q_key) >= int(target_quarter_key)
-    )
-    new_item["target_quarter_confirmed"] = target_confirmed
-
-    if target_confirmed:
-        new_item["next_check_after"] = _next_holding_disclosure_window_start(now).isoformat(timespec="seconds")
-    elif target_quarter_key is not None:
-        new_item["next_check_after"] = _holding_next_probe_time(now)
-    else:
-        new_item["next_check_after"] = _next_holding_disclosure_window_start(now).isoformat(timespec="seconds")
-
-    return new_item
+    return qkey, qlabel
 
 
 def get_latest_stock_holdings_df(
@@ -2075,26 +2083,20 @@ def get_latest_stock_holdings_df(
     cache_enabled=True,
 ):
     """
-    获取基金最新披露季度前 N 大股票持仓，带季度披露窗口缓存。
+    获取基金最新披露季度前 N 大股票持仓，带文件缓存。
 
-    新缓存策略：
-    1. 平时不主动刷新基金持仓，直接复用缓存；
-    2. 仅在季度披露试探窗口内尝试刷新：
-       - 1 月 20 日 - 2 月 10 日：上一年 Q4；
-       - 4 月 20 日 - 5 月 10 日：本年 Q1；
-       - 7 月 20 日 - 8 月 10 日：本年 Q2；
-       - 10 月 20 日 - 11 月 10 日：本年 Q3；
-    3. 窗口内每只基金最多约每 3 天试探一次；
-    4. 一旦某只基金已经抓到目标季度持仓，就停止请求它，直到下一季度披露窗口；
-    5. 如果远程接口失败，保留旧缓存，只记录 last_error 和 next_check_after。
+    当前策略：
+        - 平时有缓存就直接用缓存，不主动刷新基金持仓；
+        - 只在 1/4/7/10 月20日至次月10日的季报披露窗口低频试探；
+        - 窗口内每只基金约每 3 天最多请求一次；
+        - 某基金已拿到本轮目标季度后，停止请求，等下一季度窗口；
+        - 请求失败或返回旧季度时保留旧缓存，不污染数据。
 
-    参数 holding_cache_days 保留用于兼容旧调用；当前季度窗口策略不再依赖固定 75 天缓存周期。
+    holding_cache_days 仅保留用于兼容旧调用；新策略不依赖固定 75 天周期。
     """
     fund_code = str(fund_code).zfill(6)
     top_n = int(top_n)
     cache_key = f"{fund_code}:top{top_n}"
-    now = datetime.now()
-    target_quarter_key = _holding_target_quarter_key_for_window(now)
 
     if not cache_enabled:
         return get_latest_stock_holdings_df_uncached(
@@ -2102,160 +2104,185 @@ def get_latest_stock_holdings_df(
             top_n=top_n,
         )
 
+    now = datetime.now()
+    target_key, window_end = _target_holding_quarter_key_for_now(now)
+    in_window = target_key is not None
+
     cache = _load_json_cache(FUND_HOLDINGS_CACHE_FILE, default={})
     item = cache.get(cache_key)
-    has_cached_data = bool(isinstance(item, dict) and item.get("data_json"))
+    cached_df = _holding_cache_item_to_df(item)
 
-    # 不在披露窗口：有缓存直接用；无缓存才首次抓取。
-    if target_quarter_key is None:
-        if has_cached_data:
-            try:
-                cached_q_key, cached_q_label = _get_cached_holding_quarter_info(item)
-                _cache_log(
-                    f"使用基金持仓缓存: {cache_key}"
-                    f"; latest_quarter={cached_q_label or cached_q_key}; policy=outside_disclosure_window"
-                )
-                return _df_from_cache_json(item["data_json"])
-            except Exception as e:
-                print(f"[WARN] 基金持仓缓存损坏，将重新获取: {cache_key}, 原因: {e}", flush=True)
-
+    # 无缓存：必须抓一次，否则无法估算。
+    if cached_df is None:
         try:
-            _cache_log(f"首次获取基金持仓: {cache_key}; policy=outside_disclosure_window_no_cache")
-            df = get_latest_stock_holdings_df_uncached(
-                fund_code=fund_code,
-                top_n=top_n,
-            )
-            cache[cache_key] = _build_holding_cache_item(
-                fund_code=fund_code,
-                top_n=top_n,
-                df=df,
-                target_quarter_key=None,
-                now=now,
-                previous_item=item,
-            )
+            _cache_log(f"无基金持仓缓存，首次获取: {cache_key}")
+            df = get_latest_stock_holdings_df_uncached(fund_code=fund_code, top_n=top_n)
+            latest_key, latest_label = _holding_df_quarter_meta(df)
+            confirmed = bool(target_key is not None and latest_key is not None and latest_key >= target_key)
+            next_check = _next_holding_disclosure_window_start(now) if confirmed or not in_window else now + timedelta(days=3)
+
+            cache[cache_key] = {
+                "fetched_at": now.isoformat(timespec="seconds"),
+                "last_checked_at": now.isoformat(timespec="seconds"),
+                "next_check_after": next_check.isoformat(timespec="seconds"),
+                "fund_code": fund_code,
+                "top_n": top_n,
+                "latest_quarter_label": latest_label,
+                "latest_quarter_key": latest_key,
+                "target_quarter_key": target_key,
+                "target_quarter_confirmed": confirmed,
+                "data_json": _df_to_cache_json(df),
+            }
             _save_json_cache(FUND_HOLDINGS_CACHE_FILE, cache)
             return df
-        except Exception as e:
-            if has_cached_data:
-                cache[cache_key] = _mark_holding_probe_failed(
-                    item=item,
-                    error=e,
-                    target_quarter_key=None,
-                    now=now,
-                )
-                _save_json_cache(FUND_HOLDINGS_CACHE_FILE, cache)
-                print(f"[WARN] 基金持仓首次刷新失败，使用旧缓存: {cache_key}, 原因: {e}", flush=True)
-                return _df_from_cache_json(item["data_json"])
+        except Exception:
             raise
 
-    # 披露窗口内：按单基金目标季度与 next_check_after 控制请求。
-    if has_cached_data:
-        cached_q_key, cached_q_label = _get_cached_holding_quarter_info(item)
+    cached_key = None
+    cached_label = None
+    if isinstance(item, dict):
+        cached_key = item.get("latest_quarter_key")
+        cached_label = item.get("latest_quarter_label")
 
-        if cached_q_key is not None and int(cached_q_key) >= int(target_quarter_key):
-            _cache_log(
-                f"使用基金持仓缓存: {cache_key}"
-                f"; latest_quarter={cached_q_label or cached_q_key}; target={target_quarter_key}; confirmed=1"
-            )
-            # 顺手补齐新缓存字段，兼容旧缓存结构。
-            if not item.get("target_quarter_confirmed") or item.get("target_quarter_key") != target_quarter_key:
-                try:
-                    df_cached = _df_from_cache_json(item["data_json"])
-                    cache[cache_key] = _build_holding_cache_item(
-                        fund_code=fund_code,
-                        top_n=top_n,
-                        df=df_cached,
-                        target_quarter_key=target_quarter_key,
-                        now=now,
-                        previous_item=item,
-                    )
-                    _save_json_cache(FUND_HOLDINGS_CACHE_FILE, cache)
-                except Exception:
-                    pass
-            return _df_from_cache_json(item["data_json"])
+    if cached_key is None or cached_label is None:
+        cached_key, cached_label = _holding_df_quarter_meta(cached_df)
 
-        if not _is_next_check_due(item, now=now):
-            next_check_after = item.get("next_check_after")
-            _cache_log(
-                f"使用基金持仓缓存: {cache_key}"
-                f"; latest_quarter={cached_q_label or cached_q_key}; target={target_quarter_key}; next_check_after={next_check_after}"
-            )
-            return _df_from_cache_json(item["data_json"])
+    # 不在披露窗口：直接用缓存，不做无意义请求。
+    if not in_window:
+        next_window = _next_holding_disclosure_window_start(now)
+        if isinstance(item, dict):
+            item.update({
+                "latest_quarter_label": cached_label,
+                "latest_quarter_key": cached_key,
+                "target_quarter_key": item.get("target_quarter_key"),
+                "target_quarter_confirmed": bool(item.get("target_quarter_confirmed", False)),
+                "next_check_after": item.get("next_check_after") or next_window.isoformat(timespec="seconds"),
+            })
+            cache[cache_key] = item
+            _save_json_cache(FUND_HOLDINGS_CACHE_FILE, cache)
 
-    # 需要在披露窗口内进行一次远程试探。
+        _cache_log(f"非披露窗口，使用基金持仓缓存: {cache_key}")
+        return cached_df
+
+    # 已经拿到本轮目标季度：不再请求。
+    if cached_key is not None and int(cached_key) >= int(target_key):
+        next_window = _next_holding_disclosure_window_start(window_end or now)
+        if isinstance(item, dict):
+            item.update({
+                "latest_quarter_label": cached_label,
+                "latest_quarter_key": int(cached_key),
+                "target_quarter_key": int(target_key),
+                "target_quarter_confirmed": True,
+                "next_check_after": next_window.isoformat(timespec="seconds"),
+            })
+            cache[cache_key] = item
+            _save_json_cache(FUND_HOLDINGS_CACHE_FILE, cache)
+
+        _cache_log(f"已确认目标季度持仓，使用缓存: {cache_key} -> {cached_label}")
+        return cached_df
+
+    # 尚未拿到目标季度：检查 next_check_after，未到时间则不请求。
+    next_check_after = item.get("next_check_after") if isinstance(item, dict) else None
+    if next_check_after:
+        try:
+            next_check_dt = pd.to_datetime(next_check_after).to_pydatetime()
+            if now < next_check_dt:
+                _cache_log(f"未到下次持仓检查时间，使用缓存: {cache_key}, next={next_check_after}")
+                return cached_df
+        except Exception:
+            pass
+
+    # 到达检查时间：低频试探。
     try:
-        _cache_log(f"披露窗口试探刷新基金持仓: {cache_key}; target={target_quarter_key}")
-        df = get_latest_stock_holdings_df_uncached(
-            fund_code=fund_code,
-            top_n=top_n,
-        )
+        _cache_log(f"披露窗口内试探更新基金持仓: {cache_key}, target={target_key}")
+        df = get_latest_stock_holdings_df_uncached(fund_code=fund_code, top_n=top_n)
+        latest_key, latest_label = _holding_df_quarter_meta(df)
 
-        new_q_key, new_q_label = _holding_quarter_info_from_df(df)
+        # 防止接口返回更旧数据覆盖较新缓存。
+        if cached_key is not None and latest_key is not None and int(latest_key) < int(cached_key):
+            print(
+                f"[WARN] 远程持仓季度旧于缓存，拒绝覆盖: {cache_key}, remote={latest_key}, cache={cached_key}",
+                flush=True,
+            )
+            next_check = now + timedelta(days=3)
+            item.update({
+                "last_checked_at": now.isoformat(timespec="seconds"),
+                "next_check_after": next_check.isoformat(timespec="seconds"),
+                "target_quarter_key": int(target_key),
+                "target_quarter_confirmed": False,
+            })
+            cache[cache_key] = item
+            _save_json_cache(FUND_HOLDINGS_CACHE_FILE, cache)
+            return cached_df
 
-        # 防止远程接口偶发返回更旧的持仓，导致已缓存的较新持仓被覆盖。
-        if has_cached_data:
-            cached_q_key, cached_q_label = _get_cached_holding_quarter_info(item)
-            if (
-                cached_q_key is not None
-                and new_q_key is not None
-                and int(new_q_key) < int(cached_q_key)
-            ):
-                err = RuntimeError(
-                    f"远程返回持仓季度早于本地缓存: remote={new_q_key}, cached={cached_q_key}"
-                )
-                cache[cache_key] = _mark_holding_probe_failed(
-                    item=item,
-                    error=err,
-                    target_quarter_key=target_quarter_key,
-                    now=now,
-                )
-                _save_json_cache(FUND_HOLDINGS_CACHE_FILE, cache)
-                print(
-                    f"[WARN] 基金持仓远程结果更旧，继续使用缓存: {cache_key}, "
-                    f"remote={new_q_label or new_q_key}, cached={cached_q_label or cached_q_key}",
-                    flush=True,
-                )
-                return _df_from_cache_json(item["data_json"])
+        confirmed = bool(latest_key is not None and int(latest_key) >= int(target_key))
+        next_check = _next_holding_disclosure_window_start(window_end or now) if confirmed else now + timedelta(days=3)
 
-        cache[cache_key] = _build_holding_cache_item(
-            fund_code=fund_code,
-            top_n=top_n,
-            df=df,
-            target_quarter_key=target_quarter_key,
-            now=now,
-            previous_item=item,
-        )
+        cache[cache_key] = {
+            "fetched_at": now.isoformat(timespec="seconds"),
+            "last_checked_at": now.isoformat(timespec="seconds"),
+            "next_check_after": next_check.isoformat(timespec="seconds"),
+            "fund_code": fund_code,
+            "top_n": top_n,
+            "latest_quarter_label": latest_label,
+            "latest_quarter_key": latest_key,
+            "target_quarter_key": int(target_key),
+            "target_quarter_confirmed": confirmed,
+            "data_json": _df_to_cache_json(df),
+        }
         _save_json_cache(FUND_HOLDINGS_CACHE_FILE, cache)
 
-        if new_q_key is not None and int(new_q_key) >= int(target_quarter_key):
-            _cache_log(
-                f"基金持仓已确认目标季度: {cache_key}; latest_quarter={new_q_label or new_q_key}; target={target_quarter_key}"
-            )
+        if confirmed:
+            _cache_log(f"已更新到目标季度持仓: {cache_key} -> {latest_label}")
         else:
-            _cache_log(
-                f"基金持仓仍未到目标季度: {cache_key}; latest_quarter={new_q_label or new_q_key}; target={target_quarter_key}; next_probe={cache[cache_key].get('next_check_after')}"
-            )
+            _cache_log(f"远程仍未披露目标季度，保留本次最新持仓: {cache_key} -> {latest_label}")
 
         return df
 
     except Exception as e:
-        if has_cached_data:
-            cache[cache_key] = _mark_holding_probe_failed(
-                item=item,
-                error=e,
-                target_quarter_key=target_quarter_key,
-                now=now,
-            )
+        print(f"[WARN] 基金持仓更新失败，使用旧缓存: {cache_key}, 原因: {e}", flush=True)
+        if isinstance(item, dict):
+            next_check = now + timedelta(days=3)
+            item.update({
+                "last_checked_at": now.isoformat(timespec="seconds"),
+                "next_check_after": next_check.isoformat(timespec="seconds"),
+                "target_quarter_key": int(target_key),
+                "target_quarter_confirmed": False,
+            })
+            cache[cache_key] = item
             _save_json_cache(FUND_HOLDINGS_CACHE_FILE, cache)
-            print(
-                f"[WARN] 基金持仓披露窗口刷新失败，使用旧缓存: {cache_key}, "
-                f"target={target_quarter_key}, 原因: {e}",
-                flush=True,
-            )
-            return _df_from_cache_json(item["data_json"])
 
-        raise
+        return cached_df
 
+
+
+def _append_detail_row_without_concat_warning(df: pd.DataFrame, row: dict) -> pd.DataFrame:
+    """
+    向 detail DataFrame 追加一行，避免 pandas 在 concat / loc 追加全 NA 列时触发 FutureWarning。
+
+    说明：
+        - 不使用 pd.concat([df, one_row_df])；
+        - 不使用 df.loc[len(df)] = ... 直接扩展；
+        - 先 reindex 扩展一个唯一索引，再逐列写入。
+    """
+    out = df.copy()
+
+    for col in row.keys():
+        if col not in out.columns:
+            out[col] = pd.NA
+
+    new_index = "__extra_row__"
+    suffix = 0
+    while new_index in out.index:
+        suffix += 1
+        new_index = f"__extra_row__{suffix}"
+
+    out = out.reindex(list(out.index) + [new_index])
+
+    for col in out.columns:
+        out.at[new_index, col] = row.get(col, pd.NA)
+
+    return out.reset_index(drop=True)
 
 def estimate_stock_holdings_return(
     latest_df,
@@ -2267,6 +2294,10 @@ def estimate_stock_holdings_return(
     renormalize_available_holdings=True,
     security_return_cache_enabled=True,
     cn_hk_hourly_cache=True,
+    valuation_mode="intraday",
+    stock_residual_benchmark_return_pct=None,
+    stock_residual_benchmark_label=None,
+    stock_residual_benchmark_source=None,
 ):
     """
     使用前 N 大股票持仓估算基金收益。
@@ -2283,6 +2314,12 @@ def estimate_stock_holdings_return(
             不重新归一化，缺失持仓贡献为空，等价于把缺失仓位视为未估算。
     """
     df = latest_df.copy()
+
+    requested_valuation_mode = _normalize_valuation_mode(valuation_mode)
+    if requested_valuation_mode == "auto":
+        effective_valuation_mode = _resolve_auto_valuation_mode_from_markets(df.get("市场", []))
+    else:
+        effective_valuation_mode = requested_valuation_mode
 
     returns = []
     sources = []
@@ -2303,6 +2340,7 @@ def estimate_stock_holdings_return(
                 hk_realtime=hk_realtime,
                 security_return_cache_enabled=security_return_cache_enabled,
                 cn_hk_hourly_cache=cn_hk_hourly_cache,
+                valuation_mode=effective_valuation_mode,
             )
         except Exception as e:
             if failed_return_as_zero:
@@ -2324,42 +2362,156 @@ def estimate_stock_holdings_return(
     df["有效估算权重"] = pd.NA
     df["收益贡献"] = pd.NA
 
-    if valid_count == 0:
-        estimated_return_pct = None
-        available_weight_sum_pct = 0.0
-        failed_weight_sum_pct = float(df["归一化权重"].sum())
-        method = "stock_topn_available_normalized_failed"
-    else:
-        available_weight_sum_pct = float(df.loc[valid_mask, "归一化权重"].sum())
-        failed_weight_sum_pct = float(df.loc[~valid_mask, "归一化权重"].sum())
+    # 海外股票持仓型基金的增强补偿口径：
+    # 行情有效持仓按原始占净值比例放大；行情失败持仓与未披露仓位进入纳斯达克100补偿仓位。
+    raw_weight_sum_pct = float(pd.to_numeric(df["占净值比例"], errors="coerce").fillna(0).sum())
+    available_raw_weight_sum_pct = float(pd.to_numeric(df.loc[valid_mask, "占净值比例"], errors="coerce").fillna(0).sum())
+    failed_raw_weight_sum_pct = float(pd.to_numeric(df.loc[~valid_mask, "占净值比例"], errors="coerce").fillna(0).sum())
 
-        if available_weight_sum_pct <= 0:
+    use_residual_benchmark = stock_residual_benchmark_return_pct is not None
+
+    if use_residual_benchmark:
+        residual_label = stock_residual_benchmark_label or "剩余仓位基准"
+        residual_source = stock_residual_benchmark_source or "residual_benchmark"
+        residual_return_pct = float(stock_residual_benchmark_return_pct)
+
+        # 海外股票持仓型基金专用口径：
+        # 1. 行情有效的已披露持仓不再只按原始占净值比例计算，而是乘以人工放大系数；
+        # 2. 行情失败的已披露持仓划入纳斯达克100补偿仓位；
+        # 3. 未披露仓位也划入纳斯达克100补偿仓位；
+        # 4. 为避免总权重超过 100%，补偿仓位 = 100% - 放大后的有效持仓权重。
+        try:
+            holding_boost = float(OVERSEAS_VALID_HOLDING_BOOST)
+        except Exception:
+            holding_boost = 1.0
+
+        if not pd.notna(holding_boost) or holding_boost < 0:
+            holding_boost = 1.0
+
+        uncapped_boosted_available_weight_sum_pct = available_raw_weight_sum_pct * holding_boost
+
+        if available_raw_weight_sum_pct > 0:
+            # 封顶保护：无论 OVERSEAS_VALID_HOLDING_BOOST 设多大，
+            # 放大后的有效持仓估算权重最多为 100%，避免总估算权重超过 100%。
+            boosted_available_weight_sum_pct = min(
+                100.0,
+                uncapped_boosted_available_weight_sum_pct,
+            )
+            actual_boost = boosted_available_weight_sum_pct / available_raw_weight_sum_pct
+        else:
+            boosted_available_weight_sum_pct = 0.0
+            actual_boost = 0.0
+
+        cap_applied = uncapped_boosted_available_weight_sum_pct > 100.0
+        residual_weight_pct = max(0.0, 100.0 - boosted_available_weight_sum_pct)
+
+        if valid_count == 0 and residual_weight_pct <= 0:
             estimated_return_pct = None
+            available_weight_sum_pct = 0.0
+            failed_weight_sum_pct = failed_raw_weight_sum_pct
+            method = "stock_boosted_raw_plus_residual_benchmark_failed"
+        else:
+            # 行情有效的已披露持仓：原始占净值比例 × 实际放大系数。
+            if valid_count > 0:
+                df.loc[valid_mask, "有效估算权重"] = (
+                    df.loc[valid_mask, "占净值比例"] * actual_boost
+                )
+                df.loc[valid_mask, "收益贡献"] = (
+                    df.loc[valid_mask, "有效估算权重"] * df.loc[valid_mask, "当日涨跌幅"] / 100.0
+                )
+
+            known_contribution = float(pd.to_numeric(df.loc[valid_mask, "收益贡献"], errors="coerce").sum())
+            residual_contribution = residual_weight_pct * residual_return_pct / 100.0
+            estimated_return_pct = known_contribution + residual_contribution
+
+            available_weight_sum_pct = boosted_available_weight_sum_pct
+            failed_weight_sum_pct = failed_raw_weight_sum_pct
+            method = "stock_boosted_raw_plus_residual_benchmark"
+
+            if residual_weight_pct > 0:
+                residual_row = {
+                    "股票代码": "RESIDUAL",
+                    "股票名称": f"补偿仓位（{residual_label}）",
+                    "占净值比例": residual_weight_pct,
+                    "季度": "失败持仓与未披露仓位基准补偿",
+                    "_quarter_key": pd.NA,
+                    "市场": "INDEX",
+                    "ticker": residual_label,
+                    "归一化权重": pd.NA,
+                    "当日涨跌幅": residual_return_pct,
+                    "收益数据源": residual_source,
+                    "有效估算权重": residual_weight_pct,
+                    "收益贡献": residual_contribution,
+                }
+                df = _append_detail_row_without_concat_warning(df, residual_row)
+
+            unreported_weight_pct = max(0.0, 100.0 - raw_weight_sum_pct)
+            transferred_boost_weight_pct = max(0.0, boosted_available_weight_sum_pct - available_raw_weight_sum_pct)
+
+            if cap_applied:
+                warnings.append(
+                    f"有效持仓放大后超过 100%，已执行封顶保护："
+                    f"原始有效持仓 {available_raw_weight_sum_pct:.2f}% × 配置放大系数 {holding_boost:.2f} "
+                    f"= {uncapped_boosted_available_weight_sum_pct:.2f}%，"
+                    f"实际有效估算权重封顶为 {boosted_available_weight_sum_pct:.2f}%，"
+                    f"实际放大系数 {actual_boost:.4f}。"
+                )
+
+            warnings.append(
+                f"已启用海外股票持仓增强补偿口径：已披露前N大持仓合计 {raw_weight_sum_pct:.2f}%，"
+                f"其中行情有效 {available_raw_weight_sum_pct:.2f}%，行情失败 {failed_raw_weight_sum_pct:.2f}%，"
+                f"未披露仓位 {unreported_weight_pct:.2f}%；"
+                f"有效持仓放大系数 {holding_boost:.2f}，实际有效估算权重 {boosted_available_weight_sum_pct:.2f}%，"
+                f"从基准补偿仓位转移 {transferred_boost_weight_pct:.2f}% 给有效持仓；"
+                f"补偿仓位 {residual_weight_pct:.2f}% 使用 {residual_label} {residual_return_pct:+.4f}% 估算。"
+            )
+    else:
+        if valid_count == 0:
+            estimated_return_pct = None
+            available_weight_sum_pct = 0.0
+            failed_weight_sum_pct = float(df["归一化权重"].sum())
             method = "stock_topn_available_normalized_failed"
         else:
-            if renormalize_available_holdings:
-                df.loc[valid_mask, "有效估算权重"] = (
-                    df.loc[valid_mask, "归一化权重"] / available_weight_sum_pct * 100.0
-                )
-                method = "stock_topn_available_normalized"
-            else:
-                df.loc[valid_mask, "有效估算权重"] = df.loc[valid_mask, "归一化权重"]
-                method = "stock_topn_original_normalized"
+            available_weight_sum_pct = float(df.loc[valid_mask, "归一化权重"].sum())
+            failed_weight_sum_pct = float(df.loc[~valid_mask, "归一化权重"].sum())
 
-            df.loc[valid_mask, "收益贡献"] = (
-                df.loc[valid_mask, "有效估算权重"] * df.loc[valid_mask, "当日涨跌幅"] / 100.0
-            )
-            estimated_return_pct = float(pd.to_numeric(df.loc[valid_mask, "收益贡献"], errors="coerce").sum())
+            if available_weight_sum_pct <= 0:
+                estimated_return_pct = None
+                method = "stock_topn_available_normalized_failed"
+            else:
+                if renormalize_available_holdings:
+                    df.loc[valid_mask, "有效估算权重"] = (
+                        df.loc[valid_mask, "归一化权重"] / available_weight_sum_pct * 100.0
+                    )
+                    method = "stock_topn_available_normalized"
+                else:
+                    df.loc[valid_mask, "有效估算权重"] = df.loc[valid_mask, "归一化权重"]
+                    method = "stock_topn_original_normalized"
+
+                df.loc[valid_mask, "收益贡献"] = (
+                    df.loc[valid_mask, "有效估算权重"] * df.loc[valid_mask, "当日涨跌幅"] / 100.0
+                )
+                estimated_return_pct = float(pd.to_numeric(df.loc[valid_mask, "收益贡献"], errors="coerce").sum())
 
     summary = {
         "method": method,
-        "raw_weight_sum_pct": float(df["占净值比例"].sum()),
-        "normalized_weight_sum_pct": float(df["归一化权重"].sum()),
+        "raw_weight_sum_pct": raw_weight_sum_pct,
+        "normalized_weight_sum_pct": float(pd.to_numeric(df.get("归一化权重", pd.Series(dtype=float)), errors="coerce").sum()),
         "available_normalized_weight_sum_pct": float(available_weight_sum_pct),
         "failed_normalized_weight_sum_pct": float(failed_weight_sum_pct),
+        "available_raw_weight_sum_pct": available_raw_weight_sum_pct,
+        "failed_raw_weight_sum_pct": failed_raw_weight_sum_pct,
+        "residual_benchmark_enabled": bool(use_residual_benchmark),
+        "residual_benchmark_label": stock_residual_benchmark_label,
+        "residual_benchmark_return_pct": None if stock_residual_benchmark_return_pct is None else float(stock_residual_benchmark_return_pct),
+        "residual_benchmark_weight_pct": float(residual_weight_pct) if use_residual_benchmark and "residual_weight_pct" in locals() else 0.0,
+        "overseas_valid_holding_boost": float(OVERSEAS_VALID_HOLDING_BOOST) if use_residual_benchmark else 1.0,
+        "boosted_available_raw_weight_sum_pct": float(available_weight_sum_pct) if use_residual_benchmark else available_raw_weight_sum_pct,
         "valid_holding_count": valid_count,
         "failed_holding_count": failed_count,
         "renormalize_available_holdings": bool(renormalize_available_holdings),
+        "requested_valuation_mode": requested_valuation_mode,
+        "effective_valuation_mode": effective_valuation_mode,
         "estimated_return_pct": estimated_return_pct,
         "warnings": warnings,
     }
@@ -2382,6 +2534,7 @@ def estimate_proxy_components_return(
     failed_return_as_zero=True,
     security_return_cache_enabled=True,
     cn_hk_hourly_cache=True,
+    valuation_mode="intraday",
 ):
     """
     根据 proxy_map 中的底层 ETF / 指数组件估算基金涨跌幅。
@@ -2406,6 +2559,12 @@ def estimate_proxy_components_return(
 
     config = proxy_map[fund_code]
     components = config.get("components", [])
+
+    requested_valuation_mode = _normalize_valuation_mode(valuation_mode)
+    if requested_valuation_mode == "auto":
+        effective_valuation_mode = _resolve_auto_valuation_mode_from_components(components)
+    else:
+        effective_valuation_mode = requested_valuation_mode
 
     if not components:
         raise RuntimeError(f"基金 {fund_code} 的代理配置缺少 components。")
@@ -2445,6 +2604,7 @@ def estimate_proxy_components_return(
                 hk_realtime=hk_realtime,
                 security_return_cache_enabled=security_return_cache_enabled,
                 cn_hk_hourly_cache=cn_hk_hourly_cache,
+                valuation_mode=effective_valuation_mode,
             )
         except Exception as e:
             if failed_return_as_zero:
@@ -2475,6 +2635,8 @@ def estimate_proxy_components_return(
         "raw_weight_sum_pct": float(df["weight_pct"].sum()),
         "estimated_weight_sum_pct": float(df["估算权重"].sum()),
         "estimated_return_pct": estimated_return_pct,
+        "requested_valuation_mode": requested_valuation_mode,
+        "effective_valuation_mode": effective_valuation_mode,
         "warnings": warnings,
     }
 
@@ -2496,13 +2658,17 @@ def estimate_one_fund(
     include_purchase_limit=True,
     purchase_limit_timeout=8,
     purchase_limit_cache_days=7,
-    holding_cache_days=None,
+    holding_cache_days=75,
     cache_enabled=True,
     security_return_cache_enabled=True,
     cn_hk_hourly_cache=True,
     holding_mode="auto",
     proxy_map=None,
     proxy_normalize_weights=False,
+    valuation_mode="intraday",
+    stock_residual_benchmark_return_pct=None,
+    stock_residual_benchmark_label=None,
+    stock_residual_benchmark_source=None,
 ):
     """
     估算单只基金的今日涨跌幅。
@@ -2579,6 +2745,7 @@ def estimate_one_fund(
             proxy_normalize_weights=proxy_normalize_weights,
             security_return_cache_enabled=security_return_cache_enabled,
             cn_hk_hourly_cache=cn_hk_hourly_cache,
+            valuation_mode=valuation_mode,
         )
     else:
         latest_df = get_latest_stock_holdings_df(
@@ -2597,7 +2764,13 @@ def estimate_one_fund(
             renormalize_available_holdings=renormalize_available_holdings,
             security_return_cache_enabled=security_return_cache_enabled,
             cn_hk_hourly_cache=cn_hk_hourly_cache,
+            valuation_mode=valuation_mode,
+            stock_residual_benchmark_return_pct=stock_residual_benchmark_return_pct,
+            stock_residual_benchmark_label=stock_residual_benchmark_label,
+            stock_residual_benchmark_source=stock_residual_benchmark_source,
         )
+
+    summary["valuation_mode"] = summary.get("effective_valuation_mode", _normalize_valuation_mode(valuation_mode))
 
     result_row = {
         "基金代码": fund_code,
@@ -2628,7 +2801,7 @@ def estimate_funds(
     include_purchase_limit=True,
     purchase_limit_timeout=8,
     purchase_limit_cache_days=7,
-    holding_cache_days=None,
+    holding_cache_days=75,
     cache_enabled=True,
     security_return_cache_enabled=True,
     cn_hk_hourly_cache=True,
@@ -2637,6 +2810,10 @@ def estimate_funds(
     proxy_map=None,
     proxy_normalize_weights=False,
     include_method_col=False,
+    valuation_mode="intraday",
+    stock_residual_benchmark_return_pct=None,
+    stock_residual_benchmark_label=None,
+    stock_residual_benchmark_source=None,
 ):
     """
     批量估算多只基金的今日预估涨跌幅。
@@ -2695,6 +2872,10 @@ def estimate_funds(
                 holding_mode=holding_mode,
                 proxy_map=proxy_map,
                 proxy_normalize_weights=proxy_normalize_weights,
+                valuation_mode=valuation_mode,
+                stock_residual_benchmark_return_pct=stock_residual_benchmark_return_pct,
+                stock_residual_benchmark_label=stock_residual_benchmark_label,
+                stock_residual_benchmark_source=stock_residual_benchmark_source,
             )
 
             result_row["_输入顺序"] = i
@@ -2768,6 +2949,288 @@ def estimate_funds(
 
 
 # ============================================================
+# 7.5 市场基准：直接获取指数涨跌幅
+# ============================================================
+
+
+def fetch_us_index_return_pct_from_rsi_module(symbol, display_name=None, days=15):
+    """
+    使用 tools/rsi_module.py 中已经验证过的指数行情入口获取美股指数最新完整交易日涨跌幅。
+
+    约定：
+        .NDX -> 纳斯达克100
+        .INX -> 标普500
+
+    返回：
+        return_pct, trade_date, source
+    """
+    symbol = str(symbol).strip()
+    display_name = display_name or symbol
+
+    last_error = None
+
+    import_candidates = [
+        ("tools.rsi_module", "get_us_index_akshare"),
+        ("tools.rsi_modul", "get_us_index_akshare"),
+        ("rsi_module", "get_us_index_akshare"),
+        ("rsi_modul", "get_us_index_akshare"),
+    ]
+
+    getter = None
+    for module_name, func_name in import_candidates:
+        try:
+            module = __import__(module_name, fromlist=[func_name])
+            getter = getattr(module, func_name)
+            break
+        except Exception as e:
+            last_error = e
+
+    if getter is None:
+        raise RuntimeError(f"无法导入 rsi_module.get_us_index_akshare: {last_error}")
+
+    try:
+        df = getter(
+            symbol=symbol,
+            days=days,
+            cache_dir="cache",
+            retry=3,
+            use_cache=True,
+            allow_eastmoney=False,
+            include_realtime=False,
+        )
+    except TypeError:
+        # 兼容旧函数签名
+        df = getter(symbol=symbol, days=days)
+
+    if df is None or df.empty:
+        raise RuntimeError(f"rsi_module 返回空数据: {display_name}({symbol})")
+
+    out = df.copy()
+
+    rename_map = {
+        "日期": "date",
+        "收盘": "close",
+        "Date": "date",
+        "Close": "close",
+    }
+    out = out.rename(columns=rename_map)
+
+    if "date" not in out.columns or "close" not in out.columns:
+        raise RuntimeError(
+            f"rsi_module 指数数据缺少 date 或 close 列: {display_name}({symbol}), columns={list(out.columns)}"
+        )
+
+    out["date"] = pd.to_datetime(out["date"], errors="coerce")
+    out["close"] = pd.to_numeric(
+        out["close"].astype(str).str.replace(",", "", regex=False),
+        errors="coerce",
+    )
+    out = out.dropna(subset=["date", "close"]).sort_values("date").reset_index(drop=True)
+
+    if len(out) < 2:
+        raise RuntimeError(f"rsi_module 有效收盘点不足: {display_name}({symbol})")
+
+    last_close = float(out.iloc[-1]["close"])
+    prev_close = float(out.iloc[-2]["close"])
+
+    if prev_close == 0:
+        raise RuntimeError(f"rsi_module 前一收盘价为0: {display_name}({symbol})")
+
+    return_pct = (last_close / prev_close - 1.0) * 100.0
+    trade_date = pd.Timestamp(out.iloc[-1]["date"]).strftime("%Y-%m-%d")
+
+    return return_pct, trade_date, "rsi_module_index_daily"
+
+
+def fetch_us_index_return_pct_yahoo(symbol, display_name=None, retry=2, sleep_seconds=0.8):
+    """
+    从 Yahoo Finance chart 接口直接获取美股指数最新完整交易日涨跌幅。
+
+    这是备用兜底。常规情况下优先使用 tools/rsi_module.py 的 get_us_index_akshare。
+    """
+    symbol = str(symbol).strip().upper()
+    display_name = display_name or symbol
+    encoded_symbol = requests.utils.quote(symbol, safe="")
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{encoded_symbol}"
+    params = {
+        "range": "15d",
+        "interval": "1d",
+        "includePrePost": "false",
+        "events": "history",
+    }
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/128.0.0.0 Safari/537.36"
+        ),
+        "Referer": "https://finance.yahoo.com/",
+    }
+
+    last_error = None
+
+    for i in range(max(1, retry)):
+        try:
+            resp = requests.get(url, params=params, headers=headers, timeout=12)
+            resp.raise_for_status()
+            data = resp.json()
+            result = data.get("chart", {}).get("result", [None])[0]
+
+            if not result:
+                raise RuntimeError(f"Yahoo 返回空 result: {display_name}({symbol})")
+
+            timestamps = result.get("timestamp") or []
+            quote = (result.get("indicators", {}).get("quote") or [{}])[0]
+            closes = quote.get("close") or []
+
+            points = []
+            for ts, close in zip(timestamps, closes):
+                if close is None:
+                    continue
+                try:
+                    close_f = float(close)
+                except Exception:
+                    continue
+                if close_f > 0:
+                    points.append((int(ts), close_f))
+
+            if len(points) < 2:
+                raise RuntimeError(f"Yahoo 有效收盘点不足: {display_name}({symbol})")
+
+            prev_ts, prev_close = points[-2]
+            last_ts, last_close = points[-1]
+
+            if prev_close == 0:
+                raise RuntimeError(f"Yahoo 前一收盘价为0: {display_name}({symbol})")
+
+            return_pct = (last_close / prev_close - 1.0) * 100.0
+            trade_date = datetime.utcfromtimestamp(last_ts).strftime("%Y-%m-%d")
+            return return_pct, trade_date, "yahoo_index_chart"
+
+        except Exception as e:
+            last_error = e
+            if i < max(1, retry) - 1:
+                time.sleep(sleep_seconds)
+
+    raise RuntimeError(f"指数 {display_name}({symbol}) 获取失败: {last_error}")
+
+
+def get_us_index_return_pct_cached(symbol, display_name=None, cache_enabled=True, cache_hours=36):
+    """
+    获取美股指数最新完整交易日涨跌幅，带 JSON 缓存。
+
+    优先使用 tools/rsi_module.py 的稳定指数接口；
+    失败后再尝试 Yahoo chart 兜底。
+    """
+    symbol = str(symbol).strip().upper()
+    display_name = display_name or symbol
+    today_bucket = datetime.now().strftime("%Y-%m-%d")
+    cache_key = f"INDEX:{symbol}:{today_bucket}:last_close"
+
+    if cache_enabled:
+        cache = _load_json_cache(SECURITY_RETURN_CACHE_FILE, default={})
+        item = cache.get(cache_key)
+        if item and _is_cache_fresh(item.get("fetched_at"), max_age_hours=cache_hours):
+            try:
+                return (
+                    float(item["return_pct"]),
+                    str(item.get("trade_date", "")),
+                    item.get("source", "file_cache"),
+                )
+            except Exception:
+                pass
+
+    _cache_log(f"重新获取指数: {display_name}({symbol}) [last_close]")
+
+    errors = []
+
+    try:
+        r_pct, trade_date, source = fetch_us_index_return_pct_from_rsi_module(
+            symbol=symbol,
+            display_name=display_name,
+        )
+    except Exception as e:
+        errors.append(f"rsi_module: {repr(e)}")
+        try:
+            # Yahoo 兜底使用常见 ^NDX / ^GSPC 写法
+            yahoo_symbol = {
+                ".NDX": "^NDX",
+                ".INX": "^GSPC",
+                ".IXIC": "^IXIC",
+                ".DJI": "^DJI",
+            }.get(symbol, symbol)
+            r_pct, trade_date, source = fetch_us_index_return_pct_yahoo(
+                symbol=yahoo_symbol,
+                display_name=display_name,
+            )
+        except Exception as e2:
+            errors.append(f"yahoo: {repr(e2)}")
+            raise RuntimeError(f"指数 {display_name}({symbol}) 获取失败: {' | '.join(errors)}")
+
+    if cache_enabled:
+        cache = _load_json_cache(SECURITY_RETURN_CACHE_FILE, default={})
+        cache[cache_key] = {
+            "fetched_at": datetime.now().isoformat(timespec="seconds"),
+            "market": "INDEX",
+            "ticker": symbol,
+            "name": display_name,
+            "return_pct": float(r_pct),
+            "trade_date": trade_date,
+            "source": source,
+            "valuation_mode": "last_close",
+        }
+        _save_json_cache(SECURITY_RETURN_CACHE_FILE, cache)
+
+    return r_pct, trade_date, source
+
+
+def get_us_index_benchmark_items(cache_enabled=True):
+    """
+    获取海外表底部基准信息。直接获取指数涨跌幅，不使用 QQQ/SPY 代理。
+
+    数据源优先使用 tools/rsi_module.py：
+        .NDX -> 纳斯达克100
+        .INX -> 标普500
+    """
+    specs = [
+        {"label": "纳斯达克100", "symbol": ".NDX"},
+        {"label": "标普500", "symbol": ".INX"},
+    ]
+
+    items = []
+    for spec in specs:
+        label = spec["label"]
+        symbol = spec["symbol"]
+
+        try:
+            r_pct, trade_date, source = get_us_index_return_pct_cached(
+                symbol=symbol,
+                display_name=label,
+                cache_enabled=cache_enabled,
+            )
+            items.append({
+                "label": label,
+                "symbol": symbol,
+                "return_pct": r_pct,
+                "trade_date": trade_date,
+                "source": source,
+                "error": None,
+            })
+        except Exception as e:
+            print(f"[WARN] 指数基准 {label}({symbol}) 获取失败: {e}", flush=True)
+            items.append({
+                "label": label,
+                "symbol": symbol,
+                "return_pct": None,
+                "trade_date": "",
+                "source": "failed",
+                "error": str(e),
+            })
+
+    return items
+
+
+# ============================================================
 # 8. 表格打印与图片输出
 # ============================================================
 
@@ -2813,6 +3276,8 @@ def save_fund_estimate_table_image(
     footnote_text="按照披露的持仓股仓位或持仓仓位预估收益率",
     footnote_color="#666666",
     footnote_fontsize=15,
+    benchmark_footer_items=None,
+    benchmark_footer_fontsize=15,
     title_fontsize=20,
     title_color="black",
     title_fontweight="bold",
@@ -2876,7 +3341,13 @@ def save_fund_estimate_table_image(
 
     # 为标题和备注预留很小的区域，主体交给表格
     top_reserved = 0.08 if title else 0.03
-    bottom_reserved = 0.08 if footnote_text else 0.03
+    has_benchmark_footer = bool(benchmark_footer_items)
+    if footnote_text and has_benchmark_footer:
+        bottom_reserved = 0.13
+    elif footnote_text or has_benchmark_footer:
+        bottom_reserved = 0.09
+    else:
+        bottom_reserved = 0.03
 
     table_bbox = [0.02, bottom_reserved, 0.96, 1 - top_reserved - bottom_reserved]
 
@@ -2925,8 +3396,8 @@ def save_fund_estimate_table_image(
         "序号": 0.06,
         "基金代码": 0.10,
         "基金名称": 0.37,
-        "今日预估涨跌幅": 0.16,
-        "限购金额": 0.17,
+        "今日预估涨跌幅": 0.15,
+        "限购金额": 0.15,
         "估算方式": 0.16,
     }
 
@@ -2987,6 +3458,7 @@ def save_fund_estimate_table_image(
 
     title_artist = None
     footnote_artist = None
+    benchmark_footer_artist = None
 
     if title:
         title_y = min(table_top + title_gap, 0.985)
@@ -3001,11 +3473,75 @@ def save_fund_estimate_table_image(
             fontweight=title_fontweight,
         )
 
+    footnote_y = None
+    # ------------------------------------------------------------
+    # 底部区域顺序：
+    #   第一行：最新交易日指数基准；
+    #   第二行：备注内容。
+    # ------------------------------------------------------------
+    benchmark_line_y = None
+    footnote_line_y = None
+
+    if benchmark_footer_items:
+        benchmark_line_y = max(table_bottom - footnote_gap, 0.040 if footnote_text else 0.020)
+
+        children = [
+            TextArea(
+                "基准：",
+                textprops={"fontsize": benchmark_footer_fontsize, "color": footnote_color},
+            )
+        ]
+
+        for idx, item in enumerate(benchmark_footer_items):
+            if idx > 0:
+                children.append(
+                    TextArea("；", textprops={"fontsize": benchmark_footer_fontsize, "color": footnote_color})
+                )
+
+            label = str(item.get("label", "基准"))
+            trade_date = str(item.get("trade_date", "")).strip()
+            r_pct = item.get("return_pct")
+
+            if r_pct is None or pd.isna(r_pct):
+                seg_text = f"{label} 获取失败"
+                seg_color = neutral_color
+            else:
+                # 日期必须显式显示在每个指数后，避免两个指数交易日不一致时产生歧义。
+                seg_text = f"{label}（{trade_date or '日期未知'}）{format_pct(r_pct, digits=2)}"
+                seg_color = up_color if float(r_pct) > 0 else (down_color if float(r_pct) < 0 else neutral_color)
+
+            children.append(
+                TextArea(
+                    seg_text,
+                    textprops={
+                        "fontsize": benchmark_footer_fontsize,
+                        "color": seg_color,
+                        "fontweight": "bold",
+                    },
+                )
+            )
+
+        footer_pack = HPacker(children=children, align="center", pad=0, sep=2)
+        benchmark_footer_artist = AnchoredOffsetbox(
+            loc="center",
+            child=footer_pack,
+            pad=0.0,
+            frameon=False,
+            bbox_to_anchor=(0.5, benchmark_line_y),
+            bbox_transform=fig.transFigure,
+            borderpad=0.0,
+        )
+        fig.add_artist(benchmark_footer_artist)
+
     if footnote_text:
-        footnote_y = max(table_bottom - footnote_gap, 0.015)
+        if benchmark_line_y is not None:
+            footnote_line_y = max(benchmark_line_y - 0.030, 0.010)
+        else:
+            footnote_line_y = max(table_bottom - footnote_gap, 0.015)
+
         footnote_artist = fig.text(
             0.5,
-            footnote_y,
+            footnote_line_y,
             f"备注：{footnote_text}",
             ha="center",
             va="top",
@@ -3020,6 +3556,8 @@ def save_fund_estimate_table_image(
         extra_artists.append(title_artist)
     if footnote_artist is not None:
         extra_artists.append(footnote_artist)
+    if benchmark_footer_artist is not None:
+        extra_artists.append(benchmark_footer_artist)
     extra_artists.extend(watermark_artists)
 
     fig.savefig(
@@ -3035,6 +3573,123 @@ def save_fund_estimate_table_image(
 
 
 
+def build_benchmark_rows(
+    benchmark_components,
+    include_purchase_limit=True,
+    manual_returns_pct=None,
+    prefer_intraday=True,
+    us_realtime=False,
+    hk_realtime=False,
+    security_return_cache_enabled=True,
+    cn_hk_hourly_cache=True,
+    valuation_mode="last_close",
+):
+    """
+    构造市场基准行，用于追加到基金收益表。
+
+    为了稳定可获取，纳斯达克100建议用 QQQ 代理，标普500用 SPY 代理。
+    """
+    if not benchmark_components:
+        return []
+
+    rows = []
+    for i, comp in enumerate(benchmark_components, start=1):
+        name = str(comp.get("name", comp.get("code", f"基准{i}"))).strip()
+        code = str(comp.get("code", "")).strip()
+        market = str(comp.get("market", "US")).strip().upper()
+        display_code = str(comp.get("display_code", code)).strip()
+
+        try:
+            r_pct, source = get_stock_return_pct(
+                market=market,
+                ticker=code,
+                manual_returns_pct=manual_returns_pct,
+                prefer_intraday=prefer_intraday,
+                us_realtime=us_realtime,
+                hk_realtime=hk_realtime,
+                security_return_cache_enabled=security_return_cache_enabled,
+                cn_hk_hourly_cache=cn_hk_hourly_cache,
+                valuation_mode=valuation_mode,
+            )
+            method = f"benchmark_{source}"
+        except Exception as e:
+            print(f"[WARN] 市场基准 {name}({code}) 获取失败: {e}", flush=True)
+            r_pct = None
+            method = "benchmark_failed"
+
+        row = {
+            "基金代码": display_code,
+            "基金名称": name,
+            "今日预估涨跌幅": r_pct,
+            "_估算方式": method,
+        }
+
+        if include_purchase_limit:
+            row["限购金额"] = "—"
+
+        rows.append(row)
+
+    return rows
+
+
+def _attach_benchmark_rows_to_result_df(
+    result_df,
+    benchmark_rows,
+    include_purchase_limit=True,
+    include_method_col=False,
+    benchmark_position="top",
+):
+    """
+    将市场基准行追加到收益表，并重新编号。
+    """
+    if not benchmark_rows:
+        return result_df
+
+    bench_df = pd.DataFrame(benchmark_rows)
+
+    cols = ["序号", "基金代码", "基金名称", "今日预估涨跌幅"]
+    if include_purchase_limit:
+        cols.append("限购金额")
+    if include_method_col:
+        bench_df["估算方式"] = bench_df.get("_估算方式", "benchmark")
+        cols.append("估算方式")
+
+    for col in cols:
+        if col not in bench_df.columns:
+            bench_df[col] = "" if col != "今日预估涨跌幅" else None
+        if col not in result_df.columns:
+            result_df[col] = "" if col != "今日预估涨跌幅" else None
+
+    bench_df = bench_df[cols]
+    result_df = result_df[cols]
+
+    if str(benchmark_position).strip().lower() == "bottom":
+        out = pd.concat([result_df, bench_df], ignore_index=True)
+    else:
+        out = pd.concat([bench_df, result_df], ignore_index=True)
+
+    out["序号"] = range(1, len(out) + 1)
+    return out
+
+
+
+
+def _is_overseas_fund_table_context(title=None, output_file=None) -> bool:
+    """
+    判断当前表格是否为“海外市场基金收益表”。
+
+    只用于自动启用海外股票持仓型基金的剩余仓位纳斯达克100补偿口径。
+    不改变国内基金表，不改变 DEFAULT_FUND_PROXY_MAP 中 ETF/FOF/指数代理基金的计算逻辑。
+    """
+    texts = []
+    if title is not None:
+        texts.append(str(title))
+    if output_file is not None:
+        texts.append(str(output_file))
+
+    joined = " ".join(texts).lower()
+    return any(key in joined for key in ["海外", "haiwai", "global", "qdii", "oversea", "overseas"])
+
 def estimate_funds_and_save_table(
     fund_codes,
     top_n=10,
@@ -3048,7 +3703,7 @@ def estimate_funds_and_save_table(
     include_purchase_limit=True,
     purchase_limit_timeout=8,
     purchase_limit_cache_days=7,
-    holding_cache_days=None,
+    holding_cache_days=75,
     cache_enabled=True,
     security_return_cache_enabled=True,
     cn_hk_hourly_cache=True,
@@ -3065,16 +3720,18 @@ def estimate_funds_and_save_table(
     up_color="red",
     down_color="green",
     neutral_color="black",
-    pct_digits=4,
+    pct_digits=2,
     dpi=220,
     header_bg="#2f3b52",
     header_text_color="white",
     grid_color="#d9d9d9",
     figure_width=None,
     row_height=0.55,
-    footnote_text="按照披露的持仓股仓位或持仓仓位预估收益率",
+    footnote_text="按照基金公告披露的持仓股涨跌幅及仓位预估基金收益率",
     footnote_color="#666666",
     footnote_fontsize=15, # 控制备注字体大小
+    benchmark_footer_items=None,
+    benchmark_footer_fontsize=15,
     title_fontsize=20, # 控制标题字体大小
     title_color="black",
     title_fontweight="bold",
@@ -3090,6 +3747,13 @@ def estimate_funds_and_save_table(
     proxy_map=None,
     proxy_normalize_weights=False,
     include_method_col=False,
+    valuation_mode="intraday",
+    stock_residual_benchmark=None,
+    stock_residual_benchmark_return_pct=None,
+    stock_residual_benchmark_label=None,
+    stock_residual_benchmark_source=None,
+    benchmark_components=None,
+    benchmark_position="top",
 ):
     """
     一站式入口：估算多个基金、打印表格、保存图片。
@@ -3157,11 +3821,43 @@ def estimate_funds_and_save_table(
     pad_inches:
         保存图片时的外边距。数值越小，整张图片留白越少。
     """
+    auto_overseas_residual_enabled = _is_overseas_fund_table_context(
+        title=title,
+        output_file=output_file,
+    )
+
     if title is None:
         title = "海外市场收益预估"+ datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     if proxy_map is None:
         proxy_map = DEFAULT_FUND_PROXY_MAP
+
+    # 股票持仓型基金的“剩余仓位基准补偿”。
+    # 自动规则：仅当当前表格被识别为“海外市场基金收益表”时启用纳斯达克100补偿；
+    # 国内表不启用；DEFAULT_FUND_PROXY_MAP 中 ETF/FOF/指数代理基金仍保持原计算逻辑。
+    if (
+        stock_residual_benchmark is None
+        and stock_residual_benchmark_return_pct is None
+        and auto_overseas_residual_enabled
+    ):
+        stock_residual_benchmark = "nasdaq100"
+
+    if stock_residual_benchmark and stock_residual_benchmark_return_pct is None:
+        bench_key = str(stock_residual_benchmark).strip().lower()
+        if bench_key in {"nasdaq100", "nasdaq_100", "ndx", ".ndx"}:
+            try:
+                r_pct, trade_date, source = get_us_index_return_pct_cached(
+                    symbol=".NDX",
+                    display_name="纳斯达克100",
+                    cache_enabled=cache_enabled,
+                )
+                stock_residual_benchmark_return_pct = r_pct
+                stock_residual_benchmark_label = stock_residual_benchmark_label or f"纳斯达克100({trade_date})"
+                stock_residual_benchmark_source = stock_residual_benchmark_source or source
+            except Exception as e:
+                print(f"[WARN] 剩余仓位基准 {stock_residual_benchmark} 获取失败，将沿用原股票持仓估算口径: {e}", flush=True)
+        else:
+            print(f"[WARN] 未识别的 stock_residual_benchmark={stock_residual_benchmark!r}，将沿用原股票持仓估算口径。", flush=True)
 
     result_df, detail_map = estimate_funds(
         fund_codes=fund_codes,
@@ -3183,6 +3879,30 @@ def estimate_funds_and_save_table(
         proxy_map=proxy_map,
         proxy_normalize_weights=proxy_normalize_weights,
         include_method_col=include_method_col,
+        valuation_mode=valuation_mode,
+        stock_residual_benchmark_return_pct=stock_residual_benchmark_return_pct,
+        stock_residual_benchmark_label=stock_residual_benchmark_label,
+        stock_residual_benchmark_source=stock_residual_benchmark_source,
+    )
+
+    benchmark_rows = build_benchmark_rows(
+        benchmark_components=benchmark_components,
+        include_purchase_limit=include_purchase_limit,
+        manual_returns_pct=manual_returns_pct,
+        prefer_intraday=prefer_intraday,
+        us_realtime=us_realtime,
+        hk_realtime=hk_realtime,
+        security_return_cache_enabled=security_return_cache_enabled,
+        cn_hk_hourly_cache=cn_hk_hourly_cache,
+        valuation_mode=valuation_mode,
+    )
+
+    result_df = _attach_benchmark_rows_to_result_df(
+        result_df=result_df,
+        benchmark_rows=benchmark_rows,
+        include_purchase_limit=include_purchase_limit,
+        include_method_col=include_method_col,
+        benchmark_position=benchmark_position,
     )
 
     if print_table:
@@ -3218,6 +3938,8 @@ def estimate_funds_and_save_table(
             footnote_text=footnote_text,
             footnote_color=footnote_color,
             footnote_fontsize=footnote_fontsize,
+            benchmark_footer_items=benchmark_footer_items,
+            benchmark_footer_fontsize=benchmark_footer_fontsize,
             title_fontsize=title_fontsize,
             title_color=title_color,
             title_fontweight=title_fontweight,
@@ -3249,7 +3971,7 @@ def get_jijin_holdings(
     include_purchase_limit=True,
     purchase_limit_timeout=8,
     purchase_limit_cache_days=7,
-    holding_cache_days=None,
+    holding_cache_days=75,
     cache_enabled=True,
     security_return_cache_enabled=True,
     cn_hk_hourly_cache=True,
@@ -3258,6 +3980,7 @@ def get_jijin_holdings(
     holding_mode="auto",
     proxy_map=None,
     proxy_normalize_weights=False,
+    valuation_mode="intraday",
 ):
     """
     兼容旧调用方式。
@@ -3296,6 +4019,7 @@ def get_jijin_holdings(
         holding_mode=holding_mode,
         proxy_map=proxy_map,
         proxy_normalize_weights=proxy_normalize_weights,
+        valuation_mode=valuation_mode,
     )
 
     purchase_limit_text = ""
@@ -3374,30 +4098,4 @@ if __name__ == "__main__":
     )
 
     # ========================================================
-    # 示例 2：盘中实时模式
-    # 港股实时优先；美股如无特殊需要仍建议保持日线。
-    # ========================================================
-    # estimate_funds_and_save_table(
-    #     fund_codes=["017437", "007467", "015016", "007722"],
-    #     output_file="output/fund_estimate_table_realtime.png",
-    #     us_realtime=False,
-    #     hk_realtime=True,
-    # )
 
-    # ========================================================
-    # 示例 3：新增自己的 ETF 联接代理
-    # 假设 123456 是某 ETF 联接，底层 ETF 是 510300，仓位 90%。
-    # ========================================================
-    # my_proxy_map = DEFAULT_FUND_PROXY_MAP.copy()
-    # my_proxy_map["123456"] = {
-    #     "description": "示例：沪深300ETF联接",
-    #     "components": [
-    #         {"name": "沪深300ETF", "code": "510300", "type": "cn_etf", "weight_pct": 90.0}
-    #     ],
-    # }
-    #
-    # estimate_funds_and_save_table(
-    #     fund_codes=["123456"],
-    #     proxy_map=my_proxy_map,
-    #     holding_mode="auto",
-    # )
