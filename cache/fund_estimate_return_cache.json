@@ -3715,7 +3715,7 @@
       "fund_name": "银河创新成长混合C",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
       "estimate_return_pct": 5.702501163201192,
@@ -3742,7 +3742,7 @@
         }
       },
       "holding_quarter": "2026年1季度股票投资明细",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:014143:2026-05-04"
     },
@@ -3752,7 +3752,7 @@
       "fund_name": "天弘中证人工智能C",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
       "estimate_return_pct": 3.907759300236221,
@@ -3779,7 +3779,7 @@
         }
       },
       "holding_quarter": "2026年1季度股票投资明细",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:011840:2026-05-04"
     },
@@ -3789,7 +3789,7 @@
       "fund_name": "农银行业轮动混合C",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
       "estimate_return_pct": 3.2960741281372306,
@@ -3816,7 +3816,7 @@
         }
       },
       "holding_quarter": "2026年1季度股票投资明细",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:015850:2026-05-04"
     },
@@ -3826,10 +3826,10 @@
       "fund_name": "平安新能源精选混合发起式C",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
-      "estimate_return_pct": 2.2938160438465607,
+      "estimate_return_pct": 2.823169381304298,
       "method": "stock_topn_available_normalized",
       "valuation_mode": "intraday",
       "effective_valuation_mode": "intraday",
@@ -3858,7 +3858,7 @@
         }
       },
       "holding_quarter": "2026年1季度股票投资明细",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:025924:2026-05-04"
     },
@@ -3868,7 +3868,7 @@
       "fund_name": "汇添富中证油气资源ETF发起式联接C",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
       "estimate_return_pct": 0.9062532637075708,
@@ -3895,7 +3895,7 @@
         }
       },
       "holding_quarter": "",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:023145:2026-05-04"
     },
@@ -3905,7 +3905,7 @@
       "fund_name": "国泰中证畜牧养殖ETF联接C",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
       "estimate_return_pct": 0.8102124183006508,
@@ -3932,7 +3932,7 @@
         }
       },
       "holding_quarter": "",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:012725:2026-05-04"
     },
@@ -3942,7 +3942,7 @@
       "fund_name": "广发上海金ETF联接C",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
       "estimate_return_pct": 0.39502091216890833,
@@ -3969,7 +3969,7 @@
         }
       },
       "holding_quarter": "",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:008987:2026-05-04"
     },
@@ -3979,7 +3979,7 @@
       "fund_name": "安信创新先锋混合发起C",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
       "estimate_return_pct": 0.14637398448862443,
@@ -4006,7 +4006,7 @@
         }
       },
       "holding_quarter": "2026年1季度股票投资明细",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:010238:2026-05-04"
     },
@@ -4016,7 +4016,7 @@
       "fund_name": "天弘中证光伏产业指数C",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
       "estimate_return_pct": 0.0479323856981823,
@@ -4043,7 +4043,7 @@
         }
       },
       "holding_quarter": "2026年1季度股票投资明细",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:011103:2026-05-04"
     },
@@ -4053,7 +4053,7 @@
       "fund_name": "华泰柏瑞恒生科技ETF联接(QDII)C",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
       "estimate_return_pct": -0.16099025974026115,
@@ -4080,7 +4080,7 @@
         }
       },
       "holding_quarter": "",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:015311:2026-05-04"
     },
@@ -4090,7 +4090,7 @@
       "fund_name": "广发创业板指数增强C",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
       "estimate_return_pct": -0.45660630857688517,
@@ -4117,7 +4117,7 @@
         }
       },
       "holding_quarter": "2026年1季度股票投资明细",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:025196:2026-05-04"
     },
@@ -4127,7 +4127,7 @@
       "fund_name": "华泰柏瑞中证红利低波ETF联接C",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
       "estimate_return_pct": -0.581732217573231,
@@ -4154,7 +4154,7 @@
         }
       },
       "holding_quarter": "",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:007467:2026-05-04"
     },
@@ -4164,7 +4164,7 @@
       "fund_name": "华夏国证自由现金流ETF发起式联接C",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
       "estimate_return_pct": -0.5983107088989421,
@@ -4191,7 +4191,7 @@
         }
       },
       "holding_quarter": "",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:023918:2026-05-04"
     },
@@ -4201,7 +4201,7 @@
       "fund_name": "长信中证500指数增强C",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
       "estimate_return_pct": -0.8100908777161409,
@@ -4228,7 +4228,7 @@
         }
       },
       "holding_quarter": "2026年1季度股票投资明细",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:013881:2026-05-04"
     },
@@ -4238,7 +4238,7 @@
       "fund_name": "招商中证电池主题ETF联接C",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
       "estimate_return_pct": -0.8212836438923448,
@@ -4265,7 +4265,7 @@
         }
       },
       "holding_quarter": "",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:016020:2026-05-04"
     },
@@ -4275,7 +4275,7 @@
       "fund_name": "华宝标普中国A股红利机会ETF联接C",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
       "estimate_return_pct": -0.9042857142857171,
@@ -4302,7 +4302,7 @@
         }
       },
       "holding_quarter": "",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:005125:2026-05-04"
     },
@@ -4312,7 +4312,7 @@
       "fund_name": "易方达消费行业股票",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
       "estimate_return_pct": -0.94369637335993,
@@ -4339,7 +4339,7 @@
         }
       },
       "holding_quarter": "2026年1季度股票投资明细",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:110022:2026-05-04"
     },
@@ -4349,10 +4349,10 @@
       "fund_name": "华泰柏瑞港股通医疗精选混合发起式C",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
-      "estimate_return_pct": -1.0530120467797188,
+      "estimate_return_pct": -3.1658966460904536,
       "method": "stock_topn_available_normalized",
       "valuation_mode": "intraday",
       "effective_valuation_mode": "intraday",
@@ -4376,7 +4376,7 @@
         }
       },
       "holding_quarter": "2026年1季度股票投资明细",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:019127:2026-05-04"
     },
@@ -4386,7 +4386,7 @@
       "fund_name": "博时中证全指通信设备指数发起式A",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
       "estimate_return_pct": -1.109510576122501,
@@ -4413,7 +4413,7 @@
         }
       },
       "holding_quarter": "2026年1季度股票投资明细",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:020691:2026-05-04"
     },
@@ -4423,7 +4423,7 @@
       "fund_name": "招商中证白酒指数(LOF)C",
       "valuation_date": "2026-05-04",
       "run_date_bj": "2026-05-04",
-      "run_time_bj": "2026-05-04T06:10:37",
+      "run_time_bj": "2026-05-04T14:18:34",
       "stage": "intraday",
       "is_final": false,
       "estimate_return_pct": -1.111953255409503,
@@ -4450,12 +4450,12 @@
         }
       },
       "holding_quarter": "2026年1季度股票投资明细",
-      "table_title": "国内市场收益率预估 2026-05-04 06:09:41",
+      "table_title": "国内市场收益率预估 2026-05-04 14:17:30",
       "output_file": "output/guonei_fund.png",
       "cache_key": "domestic:012414:2026-05-04"
     }
   },
-  "updated_at": "2026-05-04T06:10:37",
+  "updated_at": "2026-05-04T14:18:34",
   "benchmark_records": {
     "benchmark:.NDX:2026-04-30": {
       "market_group": "overseas",
