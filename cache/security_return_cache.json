@@ -23077,7 +23077,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:52:35"
+    "fetched_at": "2026-05-07T21:12:13"
   },
   "SECURITY:US:.INX:2026-05-07": {
     "market": "US",
@@ -23089,7 +23089,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:52:35"
+    "fetched_at": "2026-05-07T21:12:13"
   },
   "SECURITY:US:NFLX:2026-05-07": {
     "market": "US",
@@ -23101,7 +23101,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:52:46"
+    "fetched_at": "2026-05-07T21:12:21"
   },
   "SECURITY:US:NVDA:2026-05-07": {
     "market": "US",
@@ -23113,7 +23113,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:52:46"
+    "fetched_at": "2026-05-07T21:12:21"
   },
   "SECURITY:US:AAPL:2026-05-07": {
     "market": "US",
@@ -23125,7 +23125,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:52:47"
+    "fetched_at": "2026-05-07T21:12:21"
   },
   "SECURITY:US:MSFT:2026-05-07": {
     "market": "US",
@@ -23137,7 +23137,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:52:47"
+    "fetched_at": "2026-05-07T21:12:21"
   },
   "SECURITY:US:AVGO:2026-05-07": {
     "market": "US",
@@ -23149,7 +23149,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:52:48"
+    "fetched_at": "2026-05-07T21:12:22"
   },
   "SECURITY:US:TSLA:2026-05-07": {
     "market": "US",
@@ -23161,7 +23161,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:52:48"
+    "fetched_at": "2026-05-07T21:12:22"
   },
   "SECURITY:US:GOOG:2026-05-07": {
     "market": "US",
@@ -23173,7 +23173,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:52:49"
+    "fetched_at": "2026-05-07T21:12:22"
   },
   "SECURITY:US:AMZN:2026-05-07": {
     "market": "US",
@@ -23185,7 +23185,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:52:49"
+    "fetched_at": "2026-05-07T21:12:22"
   },
   "SECURITY:US:META:2026-05-07": {
     "market": "US",
@@ -23197,7 +23197,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:52:49"
+    "fetched_at": "2026-05-07T21:12:23"
   },
   "SECURITY:US:MRVL:2026-05-07": {
     "market": "US",
@@ -23209,7 +23209,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:52:50"
+    "fetched_at": "2026-05-07T21:12:23"
   },
   "SECURITY:US:TSM:2026-05-07": {
     "market": "US",
@@ -23221,7 +23221,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:52:50"
+    "fetched_at": "2026-05-07T21:12:23"
   },
   "SECURITY:US:LITE:2026-05-07": {
     "market": "US",
@@ -23233,7 +23233,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:52:51"
+    "fetched_at": "2026-05-07T21:12:23"
   },
   "SECURITY:CN:300502:2026-05-07": {
     "market": "CN",
@@ -23245,7 +23245,7 @@
     "source": "ak_stock_zh_a_daily_sina_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:52:56"
+    "fetched_at": "2026-05-07T21:12:34"
   },
   "SECURITY:US:GLW:2026-05-07": {
     "market": "US",
@@ -23257,7 +23257,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:52:56"
+    "fetched_at": "2026-05-07T21:12:34"
   },
   "SECURITY:US:AXTI:2026-05-07": {
     "market": "US",
@@ -23269,7 +23269,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:52:57"
+    "fetched_at": "2026-05-07T21:12:34"
   },
   "SECURITY:CN:300308:2026-05-07": {
     "market": "CN",
@@ -23281,7 +23281,7 @@
     "source": "ak_stock_zh_a_daily_sina_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:01"
+    "fetched_at": "2026-05-07T21:12:45"
   },
   "SECURITY:CN:688498:2026-05-07": {
     "market": "CN",
@@ -23293,7 +23293,7 @@
     "source": "ak_stock_zh_a_daily_sina_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:04"
+    "fetched_at": "2026-05-07T21:12:55"
   },
   "SECURITY:US:TSEM:2026-05-07": {
     "market": "US",
@@ -23305,7 +23305,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:05"
+    "fetched_at": "2026-05-07T21:12:55"
   },
   "SECURITY:US:GOOGL:2026-05-07": {
     "market": "US",
@@ -23317,7 +23317,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:05"
+    "fetched_at": "2026-05-07T21:12:55"
   },
   "SECURITY:CN:002384:2026-05-07": {
     "market": "CN",
@@ -23329,7 +23329,7 @@
     "source": "ak_stock_zh_a_daily_sina_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:09"
+    "fetched_at": "2026-05-07T21:13:06"
   },
   "SECURITY:US:MU:2026-05-07": {
     "market": "US",
@@ -23341,7 +23341,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:09"
+    "fetched_at": "2026-05-07T21:13:06"
   },
   "SECURITY:US:AMD:2026-05-07": {
     "market": "US",
@@ -23353,7 +23353,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:10"
+    "fetched_at": "2026-05-07T21:13:07"
   },
   "SECURITY:US:CIEN:2026-05-07": {
     "market": "US",
@@ -23365,7 +23365,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:10"
+    "fetched_at": "2026-05-07T21:13:07"
   },
   "SECURITY:US:COHR:2026-05-07": {
     "market": "US",
@@ -23377,7 +23377,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:11"
+    "fetched_at": "2026-05-07T21:13:07"
   },
   "SECURITY:US:VIAV:2026-05-07": {
     "market": "US",
@@ -23389,7 +23389,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:11"
+    "fetched_at": "2026-05-07T21:13:07"
   },
   "SECURITY:US:SNDK:2026-05-07": {
     "market": "US",
@@ -23401,7 +23401,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:12"
+    "fetched_at": "2026-05-07T21:13:08"
   },
   "SECURITY:US:AEIS:2026-05-07": {
     "market": "US",
@@ -23413,7 +23413,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:12"
+    "fetched_at": "2026-05-07T21:13:08"
   },
   "SECURITY:US:TER:2026-05-07": {
     "market": "US",
@@ -23425,7 +23425,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:12"
+    "fetched_at": "2026-05-07T21:13:08"
   },
   "SECURITY:US:LRCX:2026-05-07": {
     "market": "US",
@@ -23437,7 +23437,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:13"
+    "fetched_at": "2026-05-07T21:13:08"
   },
   "SECURITY:US:MKSI:2026-05-07": {
     "market": "US",
@@ -23449,7 +23449,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:13"
+    "fetched_at": "2026-05-07T21:13:09"
   },
   "SECURITY:US:TTMI:2026-05-07": {
     "market": "US",
@@ -23461,7 +23461,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:14"
+    "fetched_at": "2026-05-07T21:13:09"
   },
   "SECURITY:US:INTC:2026-05-07": {
     "market": "US",
@@ -23473,7 +23473,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:14"
+    "fetched_at": "2026-05-07T21:13:09"
   },
   "SECURITY:US:ASML:2026-05-07": {
     "market": "US",
@@ -23485,19 +23485,19 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:15"
+    "fetched_at": "2026-05-07T21:13:10"
   },
   "SECURITY:HK:02513:2026-05-07": {
     "market": "HK",
     "ticker": "02513",
     "valuation_anchor_date": "2026-05-07",
-    "trade_date": "",
+    "trade_date": "2026-05-06",
     "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "status": "stale",
+    "source": "ak_stock_hk_daily_sina_close_calc_trade_date_older_than_anchor",
     "calendar_is_open": true,
-    "error": "",
-    "fetched_at": "2026-05-07T17:53:15"
+    "error": "trade_date=2026-05-06 与 valuation_anchor_date=2026-05-07 不一致",
+    "fetched_at": "2026-05-07T21:13:12"
   },
   "SECURITY:US:KLAC:2026-05-07": {
     "market": "US",
@@ -23509,31 +23509,31 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:16"
+    "fetched_at": "2026-05-07T21:13:12"
   },
   "SECURITY:HK:09899:2026-05-07": {
     "market": "HK",
     "ticker": "09899",
     "valuation_anchor_date": "2026-05-07",
-    "trade_date": "",
+    "trade_date": "2026-05-06",
     "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "status": "stale",
+    "source": "ak_stock_hk_daily_sina_close_calc_trade_date_older_than_anchor",
     "calendar_is_open": true,
-    "error": "",
-    "fetched_at": "2026-05-07T17:53:16"
+    "error": "trade_date=2026-05-06 与 valuation_anchor_date=2026-05-07 不一致",
+    "fetched_at": "2026-05-07T21:13:20"
   },
   "SECURITY:HK:00522:2026-05-07": {
     "market": "HK",
     "ticker": "00522",
     "valuation_anchor_date": "2026-05-07",
-    "trade_date": "",
-    "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "trade_date": "2026-05-07",
+    "return_pct": 2.073726839071033,
+    "status": "traded",
+    "source": "ak_stock_hk_daily_sina_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:16"
+    "fetched_at": "2026-05-07T21:13:27"
   },
   "SECURITY:KR:000660:2026-05-07": {
     "market": "KR",
@@ -23569,7 +23569,7 @@
     "source": "ak_stock_zh_a_daily_sina_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:20"
+    "fetched_at": "2026-05-07T21:13:39"
   },
   "SECURITY:UNKNOWN:JP3684400009:2026-05-07": {
     "market": "UNKNOWN",
@@ -23581,7 +23581,7 @@
     "source": "calendar_failed",
     "calendar_is_open": null,
     "error": "未配置交易日历: market=UNKNOWN",
-    "fetched_at": "2026-05-07T16:35:44"
+    "fetched_at": "2026-05-07T21:13:39"
   },
   "SECURITY:US:WDC:2026-05-07": {
     "market": "US",
@@ -23593,7 +23593,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:21"
+    "fetched_at": "2026-05-07T21:13:39"
   },
   "SECURITY:US:MPWR:2026-05-07": {
     "market": "US",
@@ -23605,7 +23605,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:21"
+    "fetched_at": "2026-05-07T21:13:39"
   },
   "SECURITY:US:LLY:2026-05-07": {
     "market": "US",
@@ -23617,7 +23617,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:21"
+    "fetched_at": "2026-05-07T21:13:40"
   },
   "SECURITY:US:GEV:2026-05-07": {
     "market": "US",
@@ -23629,7 +23629,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:22"
+    "fetched_at": "2026-05-07T21:13:40"
   },
   "SECURITY:US:GE:2026-05-07": {
     "market": "US",
@@ -23641,7 +23641,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:22"
+    "fetched_at": "2026-05-07T21:13:40"
   },
   "SECURITY:UNKNOWN:RR.:2026-05-07": {
     "market": "UNKNOWN",
@@ -23653,7 +23653,7 @@
     "source": "calendar_failed",
     "calendar_is_open": null,
     "error": "未配置交易日历: market=UNKNOWN",
-    "fetched_at": "2026-05-07T16:35:45"
+    "fetched_at": "2026-05-07T21:13:40"
   },
   "SECURITY:US:ONTO:2026-05-07": {
     "market": "US",
@@ -23665,7 +23665,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:23"
+    "fetched_at": "2026-05-07T21:13:40"
   },
   "SECURITY:US:AAOI:2026-05-07": {
     "market": "US",
@@ -23677,7 +23677,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:23"
+    "fetched_at": "2026-05-07T21:13:41"
   },
   "SECURITY:UNKNOWN:285AJP:2026-05-07": {
     "market": "UNKNOWN",
@@ -23689,31 +23689,31 @@
     "source": "calendar_failed",
     "calendar_is_open": null,
     "error": "未配置交易日历: market=UNKNOWN",
-    "fetched_at": "2026-05-07T16:35:46"
+    "fetched_at": "2026-05-07T21:13:41"
   },
   "SECURITY:HK:00981:2026-05-07": {
     "market": "HK",
     "ticker": "00981",
     "valuation_anchor_date": "2026-05-07",
-    "trade_date": "",
+    "trade_date": "2026-05-06",
     "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "status": "stale",
+    "source": "ak_stock_hk_daily_sina_close_calc_trade_date_older_than_anchor",
     "calendar_is_open": true,
-    "error": "",
-    "fetched_at": "2026-05-07T17:53:24"
+    "error": "trade_date=2026-05-06 与 valuation_anchor_date=2026-05-07 不一致",
+    "fetched_at": "2026-05-07T21:13:44"
   },
   "SECURITY:HK:01347:2026-05-07": {
     "market": "HK",
     "ticker": "01347",
     "valuation_anchor_date": "2026-05-07",
-    "trade_date": "",
+    "trade_date": "2026-05-06",
     "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "status": "stale",
+    "source": "ak_stock_hk_daily_sina_close_calc_trade_date_older_than_anchor",
     "calendar_is_open": true,
-    "error": "",
-    "fetched_at": "2026-05-07T17:53:24"
+    "error": "trade_date=2026-05-06 与 valuation_anchor_date=2026-05-07 不一致",
+    "fetched_at": "2026-05-07T21:13:49"
   },
   "SECURITY:US:TXN:2026-05-07": {
     "market": "US",
@@ -23725,7 +23725,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:25"
+    "fetched_at": "2026-05-07T21:13:49"
   },
   "SECURITY:US:AMAT:2026-05-07": {
     "market": "US",
@@ -23737,19 +23737,19 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:25"
+    "fetched_at": "2026-05-07T21:13:50"
   },
   "SECURITY:HK:09988:2026-05-07": {
     "market": "HK",
     "ticker": "09988",
     "valuation_anchor_date": "2026-05-07",
-    "trade_date": "",
+    "trade_date": "2026-05-06",
     "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "status": "stale",
+    "source": "ak_stock_hk_daily_sina_close_calc_trade_date_older_than_anchor",
     "calendar_is_open": true,
-    "error": "",
-    "fetched_at": "2026-05-07T17:53:26"
+    "error": "trade_date=2026-05-06 与 valuation_anchor_date=2026-05-07 不一致",
+    "fetched_at": "2026-05-07T21:13:53"
   },
   "SECURITY:CN:688256:2026-05-07": {
     "market": "CN",
@@ -23761,7 +23761,7 @@
     "source": "ak_stock_zh_a_daily_sina_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:30"
+    "fetched_at": "2026-05-07T21:14:07"
   },
   "SECURITY:US:GILD:2026-05-07": {
     "market": "US",
@@ -23773,7 +23773,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:30"
+    "fetched_at": "2026-05-07T21:14:07"
   },
   "SECURITY:US:VRTX:2026-05-07": {
     "market": "US",
@@ -23785,7 +23785,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:31"
+    "fetched_at": "2026-05-07T21:14:08"
   },
   "SECURITY:US:AMGN:2026-05-07": {
     "market": "US",
@@ -23797,7 +23797,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:31"
+    "fetched_at": "2026-05-07T21:14:08"
   },
   "SECURITY:US:REGN:2026-05-07": {
     "market": "US",
@@ -23809,7 +23809,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:32"
+    "fetched_at": "2026-05-07T21:14:08"
   },
   "SECURITY:US:ALNY:2026-05-07": {
     "market": "US",
@@ -23821,7 +23821,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:32"
+    "fetched_at": "2026-05-07T21:14:08"
   },
   "SECURITY:US:INSM:2026-05-07": {
     "market": "US",
@@ -23833,7 +23833,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:33"
+    "fetched_at": "2026-05-07T21:14:09"
   },
   "SECURITY:US:BIIB:2026-05-07": {
     "market": "US",
@@ -23845,7 +23845,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:33"
+    "fetched_at": "2026-05-07T21:14:09"
   },
   "SECURITY:US:UTHR:2026-05-07": {
     "market": "US",
@@ -23857,7 +23857,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:34"
+    "fetched_at": "2026-05-07T21:14:09"
   },
   "SECURITY:US:ARGX:2026-05-07": {
     "market": "US",
@@ -23869,7 +23869,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:34"
+    "fetched_at": "2026-05-07T21:14:09"
   },
   "SECURITY:US:RPRX:2026-05-07": {
     "market": "US",
@@ -23881,31 +23881,31 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:34"
+    "fetched_at": "2026-05-07T21:14:10"
   },
   "SECURITY:HK:01088:2026-05-07": {
     "market": "HK",
     "ticker": "01088",
     "valuation_anchor_date": "2026-05-07",
-    "trade_date": "",
+    "trade_date": "2026-05-06",
     "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "status": "stale",
+    "source": "ak_stock_hk_daily_sina_close_calc_trade_date_older_than_anchor",
     "calendar_is_open": true,
-    "error": "",
-    "fetched_at": "2026-05-07T17:53:35"
+    "error": "trade_date=2026-05-06 与 valuation_anchor_date=2026-05-07 不一致",
+    "fetched_at": "2026-05-07T21:14:14"
   },
   "SECURITY:HK:00883:2026-05-07": {
     "market": "HK",
     "ticker": "00883",
     "valuation_anchor_date": "2026-05-07",
-    "trade_date": "",
+    "trade_date": "2026-05-06",
     "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "status": "stale",
+    "source": "ak_stock_hk_daily_sina_close_calc_trade_date_older_than_anchor",
     "calendar_is_open": true,
-    "error": "",
-    "fetched_at": "2026-05-07T17:53:35"
+    "error": "trade_date=2026-05-06 与 valuation_anchor_date=2026-05-07 不一致",
+    "fetched_at": "2026-05-07T21:14:18"
   },
   "SECURITY:US:COP:2026-05-07": {
     "market": "US",
@@ -23917,7 +23917,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:36"
+    "fetched_at": "2026-05-07T21:14:18"
   },
   "SECURITY:US:XOM:2026-05-07": {
     "market": "US",
@@ -23929,7 +23929,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:36"
+    "fetched_at": "2026-05-07T21:14:19"
   },
   "SECURITY:US:CVX:2026-05-07": {
     "market": "US",
@@ -23941,7 +23941,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:37"
+    "fetched_at": "2026-05-07T21:14:19"
   },
   "SECURITY:US:T:2026-05-07": {
     "market": "US",
@@ -23953,7 +23953,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:37"
+    "fetched_at": "2026-05-07T21:14:19"
   },
   "SECURITY:US:MDLZ:2026-05-07": {
     "market": "US",
@@ -23965,7 +23965,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:38"
+    "fetched_at": "2026-05-07T21:14:19"
   },
   "SECURITY:US:C:2026-05-07": {
     "market": "US",
@@ -23977,7 +23977,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:38"
+    "fetched_at": "2026-05-07T21:14:20"
   },
   "SECURITY:US:WFC:2026-05-07": {
     "market": "US",
@@ -23989,7 +23989,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:38"
+    "fetched_at": "2026-05-07T21:14:20"
   },
   "SECURITY:US:MRK:2026-05-07": {
     "market": "US",
@@ -24001,7 +24001,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:39"
+    "fetched_at": "2026-05-07T21:14:20"
   },
   "SECURITY:US:CRCL:2026-05-07": {
     "market": "US",
@@ -24013,7 +24013,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:39"
+    "fetched_at": "2026-05-07T21:14:20"
   },
   "SECURITY:US:BATS:2026-05-07": {
     "market": "US",
@@ -24025,7 +24025,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:40"
+    "fetched_at": "2026-05-07T21:14:21"
   },
   "SECURITY:UNKNOWN:FR0000073272:2026-05-07": {
     "market": "UNKNOWN",
@@ -24037,7 +24037,7 @@
     "source": "calendar_failed",
     "calendar_is_open": null,
     "error": "未配置交易日历: market=UNKNOWN",
-    "fetched_at": "2026-05-07T16:35:53"
+    "fetched_at": "2026-05-07T21:14:21"
   },
   "SECURITY:US:JBL:2026-05-07": {
     "market": "US",
@@ -24049,7 +24049,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:40"
+    "fetched_at": "2026-05-07T21:14:21"
   },
   "SECURITY:US:APA:2026-05-07": {
     "market": "US",
@@ -24061,7 +24061,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:41"
+    "fetched_at": "2026-05-07T21:14:21"
   },
   "SECURITY:US:DOW:2026-05-07": {
     "market": "US",
@@ -24073,7 +24073,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:41"
+    "fetched_at": "2026-05-07T21:14:21"
   },
   "SECURITY:US:LYB:2026-05-07": {
     "market": "US",
@@ -24085,7 +24085,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:42"
+    "fetched_at": "2026-05-07T21:14:22"
   },
   "SECURITY:US:OXY:2026-05-07": {
     "market": "US",
@@ -24097,7 +24097,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:42"
+    "fetched_at": "2026-05-07T21:14:22"
   },
   "SECURITY:US:DELL:2026-05-07": {
     "market": "US",
@@ -24109,7 +24109,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:42"
+    "fetched_at": "2026-05-07T21:14:22"
   },
   "SECURITY:US:DAL:2026-05-07": {
     "market": "US",
@@ -24121,7 +24121,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:43"
+    "fetched_at": "2026-05-07T21:14:23"
   },
   "SECURITY:US:FANG:2026-05-07": {
     "market": "US",
@@ -24133,7 +24133,7 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:43"
+    "fetched_at": "2026-05-07T21:14:23"
   },
   "SECURITY:US:EOG:2026-05-07": {
     "market": "US",
@@ -24145,6 +24145,6 @@
     "source": "market_close_not_confirmed",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-07T17:53:44"
+    "fetched_at": "2026-05-07T21:14:23"
   }
 }
