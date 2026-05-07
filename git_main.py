@@ -298,22 +298,22 @@ def main(argv: list[str] | None = None) -> int:
     subject = f"AHNS 每日市场图自动生成 - {finished_at.strftime('%Y-%m-%d %H:%M')}"
     log(f"开始发送邮件：图片 {len(images)} 张，总大小 {format_file_size(image_total_size)}")
     email_started = time.perf_counter()
-    # try:
-    #     send_email(
-    #         subject=subject,
-    #         text=email_text,
-    #         image_paths=images,
-    #         to_email=args.receiver,
-    #         embed_images=True,
-    #         attach_images=True,
-    #         timeout=240,
-    #     )
-    # except Exception:
-    #     log(
-    #         "邮件发送失败：如果 SMTP 登录正常，常见原因是邮件体积较大、网络较慢或服务端中途断开。"
-    #         "当前仍按“正文内嵌 + 附件”发送，可稍后重试。"
-    #     )
-    #     raise
+    try:
+        send_email(
+            subject=subject,
+            text=email_text,
+            image_paths=images,
+            to_email=args.receiver,
+            embed_images=True,
+            attach_images=True,
+            timeout=240,
+        )
+    except Exception:
+        log(
+            "邮件发送失败：如果 SMTP 登录正常，常见原因是邮件体积较大、网络较慢或服务端中途断开。"
+            "当前仍按“正文内嵌 + 附件”发送，可稍后重试。"
+        )
+        raise
 
     log(f"邮件发送完成，耗时 {format_duration(time.perf_counter() - email_started)}")
     return 0
