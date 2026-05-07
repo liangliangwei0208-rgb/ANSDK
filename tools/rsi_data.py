@@ -1717,6 +1717,71 @@ def _plot_volume_bar(ax, df: pd.DataFrame) -> None:
     ax.set_ylabel("成交量")
 
 
+def _expand_price_ylim_for_period_markers(ax, signal_specs: list[dict]) -> None:
+    """
+    Give offset text markers enough vertical room in the price subplot.
+
+    Matplotlib annotations that use ``textcoords="offset points"`` do not
+    participate in data autoscaling, so large markers near a local high can
+    visually run outside the axes.  Convert the marker offset/font size from
+    points to an approximate data-space margin and expand only as needed.
+    """
+    if ax is None or not signal_specs:
+        return
+
+    try:
+        ymin, ymax = ax.get_ylim()
+    except Exception:
+        return
+
+    if not np.isfinite(ymin) or not np.isfinite(ymax) or ymax <= ymin:
+        return
+
+    fig = ax.figure
+    fig.canvas.draw()
+    axes_height_px = max(float(ax.get_window_extent().height), 1.0)
+    data_range = float(ymax - ymin)
+
+    desired_top = float(ymax)
+    desired_bottom = float(ymin)
+
+    for spec in signal_specs:
+        signal_df = spec.get("signal_df")
+        rsi_col = spec.get("rsi_col")
+        if signal_df is None or signal_df.empty or rsi_col not in signal_df.columns or "close" not in signal_df.columns:
+            continue
+
+        tmp = signal_df.copy()
+        tmp["close"] = pd.to_numeric(tmp["close"], errors="coerce")
+        tmp[rsi_col] = pd.to_numeric(tmp[rsi_col], errors="coerce")
+        tmp = tmp.dropna(subset=["close", rsi_col])
+        if tmp.empty:
+            continue
+
+        marker_fontsize = float(spec.get("marker_fontsize", 12))
+        high_offset_points = abs(float(spec.get("high_offset_points", 0)))
+        low_offset_points = abs(float(spec.get("low_offset_points", 0)))
+
+        # Approximate visible marker height as 90% of fontsize, then leave a
+        # small cushion so anti-aliased glyph edges do not touch the border.
+        high_points = high_offset_points + marker_fontsize * 0.90 + 3
+        low_points = low_offset_points + marker_fontsize * 0.90 + 3
+        high_extra = data_range * (high_points * fig.dpi / 72.0) / axes_height_px
+        low_extra = data_range * (low_points * fig.dpi / 72.0) / axes_height_px
+
+        high_mask = tmp[rsi_col] > float(spec.get("rsi_high", 80))
+        low_mask = tmp[rsi_col] < float(spec.get("rsi_low", 30))
+
+        if high_mask.any():
+            desired_top = max(desired_top, float(tmp.loc[high_mask, "close"].max()) + high_extra)
+
+        if low_mask.any():
+            desired_bottom = min(desired_bottom, float(tmp.loc[low_mask, "close"].min()) - low_extra)
+
+    if desired_bottom < ymin or desired_top > ymax:
+        ax.set_ylim(desired_bottom, desired_top)
+
+
 def plot_analysis(
     df: pd.DataFrame,
     symbol: str,
@@ -1792,6 +1857,29 @@ def plot_analysis(
     # 给周线/月线标记留出上下空间。
     axes[0].margins(y=0.20)
     axes[0].autoscale_view()
+    _expand_price_ylim_for_period_markers(
+        axes[0],
+        [
+            {
+                "signal_df": weekly_signal_df if show_weekly_signals else None,
+                "rsi_col": weekly_rsi_col,
+                "rsi_high": weekly_rsi_high,
+                "rsi_low": weekly_rsi_low,
+                "high_offset_points": 10,
+                "low_offset_points": 10,
+                "marker_fontsize": 13,
+            },
+            {
+                "signal_df": monthly_signal_df if show_monthly_signals else None,
+                "rsi_col": monthly_rsi_col,
+                "rsi_high": monthly_rsi_high,
+                "rsi_low": monthly_rsi_low,
+                "high_offset_points": 15,
+                "low_offset_points": 15,
+                "marker_fontsize": 18,
+            },
+        ],
+    )
 
     # 在收盘价曲线上叠加周线/月线极端区间信号。
     if show_weekly_signals:
