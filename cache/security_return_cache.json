@@ -24229,7 +24229,7 @@
     "source": "ak_stock_us_daily_trade_date_older_than_anchor",
     "calendar_is_open": true,
     "error": "trade_date=2026-05-06 与 valuation_anchor_date=2026-05-07 不一致",
-    "fetched_at": "2026-05-08T11:30:45"
+    "fetched_at": "2026-05-08T13:47:08"
   },
   "SECURITY:US:XOP:2026-05-07": {
     "market": "US",

@@ -38,6 +38,10 @@ US_TICKER_MAP = {
     "TSMC": "TSM",
     "康宁": "GLW",
     "Corning": "GLW",
+    "Coterra Energy Inc": "CTRA",
+    "Coterra Energy": "CTRA",
+    "英美烟草": "BTI",
+    "British American Tobacco": "BTI",
 }
 
 
