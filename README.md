@@ -13,6 +13,9 @@ AHNS 是一个个人公开数据建模复盘项目，用于生成每日市场 RS
 - 支持按基金代码和估值日期打印完整估算拆解表，区分“股票自身涨跌幅”和“对基金贡献”。
 - 自动识别海外基金节假日期间的累计观察场景。
 - 在节后第 1 / 第 2 个 A 股交易日生成海外基金净值补更新观察图。
+- 海外基准表支持配置化数据源，默认尽量使用国内更友好的新浪、东方财富和 AKShare 路径，减少对 Yahoo 的依赖。
+- safe 系列公开图支持集中配置标题、字号、颜色、表头底色、表格行列间距、底部说明和水印样式。
+- A 股、港股、美股持仓日收益按“涨跌幅列优先、复权/调整后价格其次、裸收盘价最后兜底”计算，降低除权、拆股日误算风险。
 - 每天生成海外基金限额科普图；每周日额外生成海外基金限额表。
 - 支持 QQ 邮箱自动发送本次运行生成或更新的图片。
 - 支持 GitHub Actions 定时运行、手动触发、缓存自动回推和失败图片 artifact。
@@ -32,7 +35,7 @@ AHNS 是一个个人公开数据建模复盘项目，用于生成每日市场 RS
 ├── stock_analysis.py            # 市场 RSI 图入口
 ├── kepu/                        # 科普图片脚本
 ├── tools/                       # 基金估算、缓存、绘图、邮件等模块
-├── tools/configs/               # 常维护配置：基金池、代理、映射、RSI、流程等
+├── tools/configs/               # 常维护配置：基金池、代理、基准源、safe样式、映射、RSI、流程等
 ├── cache/                       # 运行缓存，会被提交并由 Actions 自动更新
 └── output/                      # 运行输出图片，不提交
 ```
@@ -90,11 +93,66 @@ AHNS 是一个个人公开数据建模复盘项目，用于生成每日市场 RS
 - `tools/configs/fund_universe_configs.py`：维护海外/全球基金池；新增基金代码优先改这里，基金代码请写 6 位字符串。
 - `tools/configs/fund_proxy_configs.py`：维护代理型基金和海外有效披露持仓增强系数。
 - `tools/configs/residual_benchmark_configs.py`：维护海外股票持仓型基金的补偿仓位基准；默认纳斯达克100，`007844` 当前使用 `XOP`。
+- `tools/configs/market_benchmark_configs.py`：维护 safe 海外基金图底部基准表。这里决定展示哪些指数、ETF 或海外资产，以及使用新浪、AKShare、东方财富还是 Yahoo 路径。
+- `tools/configs/safe_image_style_configs.py`：维护 safe 公开图样式。标题文字、标题和表格间距、表头底色、正文底色、表格线、行高、列宽、涨跌颜色、底部备注、水印文字和透明度都优先在这里改。
 - `tools/configs/security_mappings.py`：维护美股 / 韩国证券映射。
 - `tools/configs/rsi_configs.py`：维护 RSI 图标的列表。
 - `tools/paths.py`：集中维护常用缓存和输出图片路径。
 
 旧导入路径会尽量保留兼容，例如 `tools/fund_universe.py` 仍可导入基金池，但真实配置已移动到 `tools/configs/fund_universe_configs.py`。
+
+## 海外基准表配置
+
+海外基金 safe 图底部的基准表由 `tools/configs/market_benchmark_configs.py` 的 `MARKET_BENCHMARK_ITEMS` 控制。每一项都是一个字典，常用字段如下：
+
+- `enabled`：是否启用。改成 `False` 后不会删除历史缓存，但新图会过滤该基准，也不会主动更新它。
+- `label`：图片上显示的名称。
+- `kind`：行情读取类型。
+  - `us_index`：新浪美股指数，例如 `.NDX`、`.INX`、`.SOX`。
+  - `us_security`：美股股票或 ETF，例如 `XOP`。
+  - `foreign_futures`：新浪外盘期货 / 东方财富国际期货，例如 `XAU`、`GC00Y`。
+  - `yahoo`：Yahoo Chart，例如 `^VIX`。
+- `ticker`：主行情代码。
+- `fallback_ticker`：备用行情代码；主源失败后才会尝试。
+
+当前默认配置：
+
+| 名称 | kind | ticker | 默认数据源说明 |
+| --- | --- | --- | --- |
+| 纳斯达克100 | `us_index` | `.NDX` | 新浪美股指数 |
+| 标普500 | `us_index` | `.INX` | 新浪美股指数 |
+| 油气开采指数 | `us_security` | `XOP` | AKShare 美股 ETF 日线；XOP 是 ETF 代理，不是指数本体 |
+| 费城半导体 | `us_index` | `.SOX` | 新浪美股指数 |
+| 现货黄金 | `foreign_futures` | `XAU`，fallback `GC00Y` | 优先新浪外盘期货 XAU；失败后用东方财富国际期货 GC00Y |
+| VIX恐慌指数 | `yahoo` | `^VIX` | 仍保留 Yahoo 口径，但当前默认 `enabled=False` |
+
+注意：配置不会把所有失败基准自动兜到 Yahoo。只有 `kind="yahoo"` 的项目，或者代码里明确写了 Yahoo fallback 的证券路径，才会访问 Yahoo。国内环境下如果不想依赖 VPN，建议继续保持 VIX 关闭。
+
+基准记录会写入 `cache/fund_estimate_return_cache.json` 的 `benchmark_records`。如果某个基准失败，只影响该基准行，不会中断主流程，也不会影响基金主表生成。
+
+## Safe 图样式配置
+
+safe 公开图的样式集中在 `tools/configs/safe_image_style_configs.py`。这个文件只管“怎么画图”，不拉行情、不读缓存、不出图，适合后续日常微调。
+
+常用配置项：
+
+- `SAFE_TITLE_STYLE`：标题字号、颜色、粗细、标题和表格的间距。`cumulative_gap` 控制 `safe_holidays.png` / `safe_sum_holidays.png` 的标题到表格距离，数值越小越贴近。
+- `SAFE_DAILY_TABLE_STYLE`：`safe_haiwai_fund.png` 和节后第 1 天单日观察图的表格样式，包括正文/表头字号、表头底色、表头文字色、正文底色、整图底色、网格线、行高、缩放。
+- `SAFE_CUMULATIVE_TABLE_STYLE`：节假日累计图和节后第 2 天累计图的表格样式。
+- `SAFE_RETURN_COLORS`：涨跌颜色。当前按国内习惯红涨绿跌，无法获取或无效数据为黑色。
+- `SAFE_FOOTER_STYLE`：底部“个人模型……”合规提示和备注文字的颜色、字号、粗细。
+- `SAFE_DAILY_COLUMN_WIDTHS`、`SAFE_CUMULATIVE_COLUMN_WIDTHS`、`SAFE_BENCHMARK_COLUMN_WIDTHS`：列宽配置。“列间距”主要靠这里调；每次建议小幅调整 `0.01` 到 `0.03`。
+- `SAFE_WATERMARK_STYLE`：居中 `cache/mark.jpg` logo 水印和斜向“鱼师AHNS”文字水印。可改水印文字、字号、颜色、透明度、旋转角度、logo 透明度和大小比例。
+
+修改后可用下面命令单独预览：
+
+```powershell
+& F:\anaconda\envs\py310\python.exe .\safe_fund.py
+& F:\anaconda\envs\py310\python.exe .\safe_holidays.py
+& F:\anaconda\envs\py310\python.exe .\sum_holidays.py --today 2026-05-07
+```
+
+如果只是想让标题和表格更近，优先改 `SAFE_TITLE_STYLE["cumulative_gap"]` 或每日图的 `daily_gap_ratio/daily_gap_min/daily_gap_max`。如果文字挤在一起，先调列宽，再考虑降低字号。
 
 ## 邮件配置
 
@@ -185,12 +243,43 @@ Matplotlib 表格和 RSI 图默认使用 180 DPI，科普图使用 Pillow 固定
 - 海外/全球基金使用统一 `valuation_anchor_date` 估值锚点；US/CN/HK/KR 都只能使用该锚点对应的完整日线。
 - 每个市场先用交易日历判断开闭市，再校验行情接口返回的 `trade_date == valuation_anchor_date`。
 - CN/HK 日线优先使用新浪接口：A 股优先 `stock_zh_a_daily` / `fund_etf_hist_sina`，港股优先 `stock_hk_daily`；东方财富接口只作为兜底。
+- 个股收益已统一做除权/拆股防错：
+  - A 股优先使用官方涨跌幅列；没有涨跌幅列时优先使用新浪 `qfq/hfq` 复权价；最后才用未复权 raw close。
+  - 港股会同时尝试新浪 raw/qfq/hfq 和东方财富港股日线；优先涨跌幅列，其次 qfq/hfq，最后 raw close。
+  - 美股东方财富路径优先解析 kline 里的日涨跌幅字段；Yahoo fallback 优先用 `adjclose`；raw close 仅作兜底。
+  - 如果只剩 raw close 且单日绝对涨跌异常大，代码会继续尝试其他源；仍无法确认时宁愿标记为 missing/stale，也不写入明显可疑的大涨大跌。
+  - 韩国当前 pykrx 已优先读取“涨跌率”列；指数、期货和黄金没有股票除权/拆股语义，仍用完整日线 close-to-close。
 - 普通持仓型海外基金使用“有效持仓增强 + 配置基准补偿仓位”口径，`fund_estimate_breakdown.py` 可打印逐项明细。
 - 默认补偿基准为纳斯达克100；单基金可在 `tools/configs/residual_benchmark_configs.py` 指定其他基准。`007844` 当前使用 `XOP` 作为美国油气开采方向代理，`XOP` 是 ETF 不是指数本身。
 - `security_return_cache.json` 对锚点行情使用 `SECURITY:{market}:{ticker}:{valuation_anchor_date}` key，缓存 `traded/closed/pending/missing/stale` 状态。
+- 旧 A 股裸收盘价来源 `ak_stock_zh_a_daily_sina_close_calc`、旧港股裸收盘价来源 `ak_stock_hk_daily_sina_close_calc` 不再视为新鲜缓存，命中后会自动刷新到更可靠口径。旧缓存文件不会被删除。
 - `fund_estimate_return_cache.json` 只写海外/全球基金记录，key 为 `overseas:{fund_code}:{valuation_anchor_date}`。
+- 基准表记录写在 `fund_estimate_return_cache.json` 的 `benchmark_records`；显示端会按 `market_benchmark_configs.py` 的 `enabled=True` 过滤，所以禁用 VIX 后旧缓存不会继续显示。
 - 指数行情和基金估算历史保留 300 天。
 - Actions 运行后会自动回推缓存变化。
+
+## 估算拆解与排错
+
+如果某只基金的估算结果看起来异常，先用拆解工具看缓存中的逐项贡献：
+
+```powershell
+& F:\anaconda\envs\py310\python.exe .\fund_estimate_breakdown.py
+```
+
+建议重点看这些字段：
+
+- `行情交易日`：是否等于本次估值锚点。
+- `状态`：`traded` 表示已使用完整日线，`pending` 表示市场收盘未确认或行情尚未更新，`missing/stale` 表示缺失或陈旧。
+- `股票自身涨跌幅`：单只持仓自己的涨跌。
+- `估算权重`：经过有效持仓增强后的模型权重。
+- `对基金贡献`：这只持仓对基金估算收益率的贡献。
+- `数据源`：用于判断口径。正常情况下，除权/拆股敏感的股票应优先看到 `pct`、`qfq`、`hfq`、`adjclose` 等来源，而不是裸 close 计算来源。
+
+常见情况：
+
+- 刚收盘或海外市场尚未完整收盘时，美股可能是 `pending`，贡献暂时为 0，后续重新运行会刷新。
+- 如果 `fund_estimate_breakdown.py` 已显示某个持仓修复为正确涨跌幅，但基金合计仍是旧值，需要先运行 `main.py` 或 `git_main.py --no-send` 重新写入基金缓存。
+- 如果 VIX 已设为 `enabled=False` 但图片仍有 VIX，通常是在看旧图片；重新运行 `safe_fund.py` 或 `git_main.py --no-send` 即可。
 
 ## 验证命令
 
@@ -204,6 +293,20 @@ $files = @('.\git_main.py','.\check_project.py','.\main.py','.\fund_estimate_bre
 
 ```powershell
 & F:\anaconda\envs\py310\python.exe .\git_main.py --no-send
+```
+
+单独检查 safe 系列图片：
+
+```powershell
+& F:\anaconda\envs\py310\python.exe .\safe_fund.py
+& F:\anaconda\envs\py310\python.exe .\safe_holidays.py
+& F:\anaconda\envs\py310\python.exe .\sum_holidays.py --today 2026-05-07
+```
+
+检查估算拆解：
+
+```powershell
+& F:\anaconda\envs\py310\python.exe .\fund_estimate_breakdown.py 017731 --latest
 ```
 
 ## 免责声明
