@@ -81,6 +81,15 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from matplotlib import font_manager
 
+from tools.configs.fund_proxy_configs import DEFAULT_FUND_PROXY_MAP, OVERSEAS_VALID_HOLDING_BOOST
+from tools.configs.market_calendar_configs import (
+    KR_MARKET_ZERO_HOLIDAYS,
+    KR_MARKET_ZERO_HOLIDAY_MD,
+    MARKET_CALENDAR_NAMES,
+    MARKET_CLOSE_BUFFER_HOURS,
+)
+from tools.configs.security_mappings import KR_TICKER_MAP, US_TICKER_MAP
+
 # Runtime JSON cache utilities.
 
 CACHE_DIR = Path("cache")
@@ -103,31 +112,6 @@ ANCHOR_MARKET_STATUSES = {"traded", "closed", "pending", "missing", "stale"}
 ANCHOR_COMPLETE_STATUSES = {"traded", "closed"}
 ANCHOR_BAD_STATUSES = {"pending", "missing", "stale"}
 
-MARKET_CALENDAR_NAMES = {
-    "US": "NYSE",
-    "CN": "SSE",
-    "HK": "HKEX",
-    "KR": "XKRX",
-}
-
-MARKET_CLOSE_BUFFER_HOURS = 2
-
-# 海外股票持仓型基金：有效已披露持仓的人工放大系数。
-# 1.10 表示把“行情有效的已披露持仓股占净值比例”放大 10%，
-# 同时从纳斯达克100补偿仓位中扣除对应权重，保持总估算权重不超过 100%。
-OVERSEAS_VALID_HOLDING_BOOST = 1.10
-
-# 韩国市场闭市置零规则。
-# 当前需求：韩国 5月5日儿童节休市；北京时间/本地时间 5月6日早间运行时，
-# 若韩国股票最新真实交易日仍停留在 5月4日，则把 5月5日当日涨跌幅按 0% 计入，
-# 避免把 5月4日涨跌幅重复计入 5月5日基金估值。
-KR_MARKET_ZERO_HOLIDAY_MD = {
-    "05-05": "韩国儿童节",
-}
-
-KR_MARKET_ZERO_HOLIDAYS = {
-    "2026-05-05": "韩国儿童节",
-}
 
 def _cache_log(message: str) -> None:
     """统一缓存日志输出，便于在 GitHub Actions 中定位。"""
@@ -1064,138 +1048,6 @@ def _security_return_cache_key(market, ticker, cn_hk_hourly_cache=True) -> tuple
     return f"{market}:{ticker_norm}:{bucket}", ticker_norm, max_age_hours
 # ETF 联接 / FOF / 指数基金代理映射。
 
-DEFAULT_FUND_PROXY_MAP = {
-    # 华泰柏瑞中证红利低波动 ETF 联接
-    # 使用场内红利低波 ETF 作为联接基金代理资产。
-    "007467": {
-        "description": "华泰柏瑞中证红利低波动ETF联接：用底层 512890 ETF 代理",
-        "components": [
-            {
-                "name": "华泰柏瑞中证红利低波动ETF",
-                "code": "512890",
-                "type": "cn_etf",
-                "weight_pct": 99.31,
-            }
-        ],
-    },
-
-    # 华安国际龙头(DAX)ETF 联接(QDII)
-    # 常见场内 DAX ETF 代码可能为 513030；如与你软件显示不一致，请改这里。
-    "015016": {
-        "description": "华安国际龙头(DAX)ETF联接(QDII)：用底层 DAX ETF 代理",
-        "components": [
-            {
-                "name": "华安德国(DAX)ETF",
-                "code": "513030",
-                "type": "cn_etf",
-                "weight_pct": 99.89,
-            }
-        ],
-    },
-
-    # 天弘标普500(QDII-FOF)C
-    # 使用 SPY 作为标普500代理，统一走美股 ETF 行情。
-    "007722": {
-        "description": "天弘标普500(QDII-FOF)C：用 SPY 代理标普500基金仓位",
-        "components": [
-            {
-                "name": "SPDR标普500ETF",
-                "code": "SPY",
-                "type": "us_etf",
-                "weight_pct": 99.77,
-            }
-        ],
-    },
-    # 如果你有其他 ETF 联接 / FOF 需要代理，可以在这里添加，格式同上。
-    "015311": {
-        "description": "华泰柏瑞南方东英恒生科技指数：用 015311 代理恒生科技指数基金仓位",
-        "components": [
-            {
-                "name": "恒生科技指数基金",
-                "code": "513130",
-                "type": "cn_etf",
-                "weight_pct": 99.17,
-            }
-        ],
-    },
-    "005125": {
-        "description": "华宝标普中国A股红利指数：用 005125 代理标普中国A股红利指数基金仓位",
-        "components": [
-            {
-                "name": "标普中国A股红利指数基金",
-                "code": "562060",
-                "type": "cn_etf",
-                "weight_pct": 99.17,
-            }
-        ],
-    },
-    "020713": {
-        "description": "华安三菱日联日经225ETF：用 020713 代理日经225指数基金仓位",
-        "components": [
-            {
-                "name": "日经225指数基金",
-                "code": "513880",
-                "type": "cn_etf",
-                "weight_pct": 99.17,
-            }
-        ],
-    },
-    "023918": {
-        "description": "华夏国证自由现金流：用 023918 代理自由现金流指数基金仓位",
-        "components": [
-            {
-                "name": "自由现金流指数基金",
-                "code": "159201",
-                "type": "cn_etf",
-                "weight_pct": 99.17,
-            }
-        ],
-    },
-    "008987": {
-        "description": "广发上海金ETF：用 008987 代理上海金指数基金仓位",
-        "components": [
-            {
-                "name": "上海金指数基金",
-                "code": "518600",
-                "type": "cn_etf",
-                "weight_pct": 99.17,
-            }
-        ],
-    },
-    "016020": {
-        "description": "招商中证电池主题ETF：用 016020 代理电池主题指数基金仓位",
-        "components": [
-            {
-                "name": "电池主题指数基金",
-                "code": "561910",
-                "type": "cn_etf",
-                "weight_pct": 99.17,
-            }
-        ],
-    },
-    "012725": {
-        "description": "国泰中证畜牧养殖：用 012725 代理畜牧养殖指数基金仓位",
-        "components": [
-            {
-                "name": "畜牧养殖指数基金",
-                "code": "159865",
-                "type": "cn_etf",
-                "weight_pct": 99.17,
-            }
-        ],
-    },
-    "023145": {
-        "description": "汇添富中证油气资源：用 023145 代理油气资源指数基金仓位",
-        "components": [
-            {
-                "name": "油气资源指数基金",
-                "code": "159309",
-                "type": "cn_etf",
-                "weight_pct": 99.17,
-            }
-        ],
-    },
-}
 
 
 # Matplotlib 中文字体。
@@ -1511,54 +1363,6 @@ def quarter_key(q):
     return year * 10 + quarter
 
 
-US_TICKER_MAP = {
-    "奈飞": "NFLX",
-    "Netflix": "NFLX",
-    "英伟达": "NVDA",
-    "NVIDIA": "NVDA",
-    "苹果": "AAPL",
-    "Apple": "AAPL",
-    "微软": "MSFT",
-    "Microsoft": "MSFT",
-    "博通": "AVGO",
-    "Broadcom": "AVGO",
-    "特斯拉": "TSLA",
-    "Tesla": "TSLA",
-    "谷歌-C": "GOOG",
-    "谷歌C": "GOOG",
-    "Alphabet Inc Class C": "GOOG",
-    "谷歌-A": "GOOGL",
-    "谷歌A": "GOOGL",
-    "Alphabet Inc Class A": "GOOGL",
-    "亚马逊": "AMZN",
-    "Amazon": "AMZN",
-    "Meta Platforms Inc-A": "META",
-    "Meta Platforms": "META",
-    "Meta": "META",
-    "迈威尔科技": "MRVL",
-    "迈威尔": "MRVL",
-    "Marvell": "MRVL",
-    "台积电": "TSM",
-    "TSMC": "TSM",
-    "康宁": "GLW",
-    "Corning": "GLW",
-}
-
-# 数字代码跨市场歧义映射。
-# 说明：000660、005930 这类代码可能同时存在于不同市场，不能只凭 6 位数字判定为 A 股。
-# 只有当“代码 + 股票名称”同时命中这里的别名时，才判定为韩国市场；否则继续按原 A 股逻辑识别。
-KR_TICKER_MAP = {
-    "000660": {
-        "ticker": "000660",
-        "name": "SK海力士",
-        "aliases": ["SK海力士", "海力士", "SK Hynix", "Hynix", "SK hynix"],
-    },
-    "005930": {
-        "ticker": "005930",
-        "name": "三星电子",
-        "aliases": ["三星电子", "三星", "Samsung Electronics", "Samsung"],
-    },
-}
 
 
 def normalize_kr_code(code):
