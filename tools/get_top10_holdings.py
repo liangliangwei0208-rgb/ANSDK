@@ -353,12 +353,88 @@ def _anchor_status_rank(status) -> int:
     }.get(status, 0)
 
 
+SUSPICIOUS_UNADJUSTED_RETURN_ABS_PCT = 35.0
+
+
+def _is_unadjusted_close_calc_source(source: str) -> bool:
+    source_text = str(source or "").strip().lower()
+    if not source_text:
+        return False
+    if "_pct" in source_text or "adjclose" in source_text:
+        return False
+    if "_qfq_" in source_text or "_hfq_" in source_text:
+        return False
+    return "close_calc" in source_text or source_text in {
+        "ak_stock_us_daily",
+        "yahoo_chart_daily_us_fallback",
+    } or source_text.startswith("eastmoney_us_hist_daily_")
+
+
+def _raise_if_suspicious_unadjusted_return(
+    return_pct,
+    *,
+    market: str,
+    symbol: str,
+    trade_date: str,
+    source: str,
+) -> None:
+    """
+    裸收盘价在除权、转增、拆股日可能出现不真实的大涨跌。
+
+    对 CN/HK/US 的未复权 close 计算结果做保守防护：如果没有涨跌幅列、
+    adjclose、qfq/hfq 等可确认口径，且单日绝对涨跌过大，则让调用方继续
+    尝试其他数据源；如果没有其他数据源，上层会把该持仓标为 missing/stale。
+    """
+    market_norm = str(market or "").strip().upper()
+    if market_norm not in {"CN", "HK", "US"}:
+        return
+    if not _is_unadjusted_close_calc_source(source):
+        return
+    try:
+        value = abs(float(return_pct))
+    except Exception:
+        return
+    if value < SUSPICIOUS_UNADJUSTED_RETURN_ABS_PCT:
+        return
+    raise RuntimeError(
+        f"{market_norm}:{symbol} {trade_date or '未知日期'} 未复权收盘价计算涨跌幅 "
+        f"{float(return_pct):+.4f}% 过大，疑似除权/拆股口径；source={source}"
+    )
+
+
 def _is_anchor_cache_entry_fresh(item: dict) -> bool:
     status = str(item.get("status", "")).strip().lower()
+    market = str(item.get("market", "")).strip().upper()
+    source_text = str(item.get("source", "")).strip().lower()
+    if (
+        market == "CN"
+        and status == "traded"
+        and "ak_stock_zh_a_daily_sina_close_calc" in source_text
+        and "_qfq_" not in source_text
+        and "_hfq_" not in source_text
+        and "_pct" not in source_text
+    ):
+        # 旧版本用新浪未复权 close 直接相除；遇到除权/转增日会把除权价差
+        # 误算成真实跌幅。让这类旧锚点缓存自动刷新为涨跌幅列或复权口径。
+        return False
+    if (
+        market == "HK"
+        and status == "traded"
+        and "ak_stock_hk_daily_sina_close_calc" in source_text
+        and "_qfq_" not in source_text
+        and "_hfq_" not in source_text
+        and "_pct" not in source_text
+    ):
+        return False
+    if market == "US" and status == "traded" and _is_unadjusted_close_calc_source(source_text):
+        try:
+            if abs(float(item.get("return_pct"))) >= SUSPICIOUS_UNADJUSTED_RETURN_ABS_PCT:
+                return False
+        except Exception:
+            pass
     if status in {"traded", "closed"}:
         return True
 
-    market = str(item.get("market", "")).strip().upper()
     if market == "US" and status == "stale":
         source_error_text = f"{item.get('source', '')} {item.get('error', '')}".lower()
         # 旧版本美股只用新浪日线；如果新浪停在前一天，会缓存 stale。
@@ -1822,9 +1898,13 @@ def fetch_cn_security_return_pct_daily_with_date(code, lookback_days=90, end_dat
     """
     获取 A股 / A股ETF / 场内基金目标日期之前的最新完整交易日日线涨跌幅，并返回实际交易日。
 
-    优先使用新浪日线接口：
-        1. ak.stock_zh_a_daily
-        2. ak.fund_etf_hist_sina
+    A 股个股优先使用接口自带涨跌幅；没有涨跌幅列时，优先用复权价格
+    计算，避免除权/转增日把未复权价差误算成真实跌幅。
+
+    数据源优先级：
+        1. 有“涨跌幅”列的数据源；
+        2. 新浪 A 股前复权 / 后复权日线；
+        3. 新浪 / 东方财富未复权日线兜底。
 
     新浪接口失败后才回落到东方财富日线接口，避免单一数据源临时断线导致
     海外锚点估算大面积 missing。
@@ -1850,11 +1930,14 @@ def fetch_cn_security_return_pct_daily_with_date(code, lookback_days=90, end_dat
     if code.startswith(("5", "1")):
         sina_fetchers.extend([
             ("ak_fund_etf_hist_sina", lambda: ak.fund_etf_hist_sina(symbol=sina_symbol)),
-            ("ak_stock_zh_a_daily_sina", lambda: ak.stock_zh_a_daily(symbol=sina_symbol, start_date=start_date, end_date=end_date_api, adjust="")),
+            ("ak_stock_zh_a_daily_sina_qfq", lambda: ak.stock_zh_a_daily(symbol=sina_symbol, start_date=start_date, end_date=end_date_api, adjust="qfq")),
+            ("ak_stock_zh_a_daily_sina_raw", lambda: ak.stock_zh_a_daily(symbol=sina_symbol, start_date=start_date, end_date=end_date_api, adjust="")),
         ])
     else:
         sina_fetchers.extend([
-            ("ak_stock_zh_a_daily_sina", lambda: ak.stock_zh_a_daily(symbol=sina_symbol, start_date=start_date, end_date=end_date_api, adjust="")),
+            ("ak_stock_zh_a_daily_sina_qfq", lambda: ak.stock_zh_a_daily(symbol=sina_symbol, start_date=start_date, end_date=end_date_api, adjust="qfq")),
+            ("ak_stock_zh_a_daily_sina_hfq", lambda: ak.stock_zh_a_daily(symbol=sina_symbol, start_date=start_date, end_date=end_date_api, adjust="hfq")),
+            ("ak_stock_zh_a_daily_sina_raw", lambda: ak.stock_zh_a_daily(symbol=sina_symbol, start_date=start_date, end_date=end_date_api, adjust="")),
             ("ak_fund_etf_hist_sina", lambda: ak.fund_etf_hist_sina(symbol=sina_symbol)),
         ])
 
@@ -1883,6 +1966,7 @@ def fetch_cn_security_return_pct_daily_with_date(code, lookback_days=90, end_dat
     if not frames:
         raise RuntimeError(f"A股/场内基金日线返回空数据: {code}; {' | '.join(errors)}")
 
+    normalized_frames = []
     for raw_df, source_name in frames:
         out = raw_df.copy()
         date_col = _pick_column(out, ["日期", "date", "Date"])
@@ -1897,6 +1981,11 @@ def fetch_cn_security_return_pct_daily_with_date(code, lookback_days=90, end_dat
         if out.empty:
             continue
 
+        normalized_frames.append((out, source_name, date_col, close_col, pct_col))
+
+    # 先信任数据源直接给出的涨跌幅。东方财富等接口通常会在除权日给出
+    # 正确的官方涨跌幅，避免复权细节差异。
+    for out, source_name, date_col, _close_col, pct_col in normalized_frames:
         if pct_col is not None:
             pct_values = pd.to_numeric(out[pct_col], errors="coerce")
             valid_idx = pct_values[pct_values.notna()].index
@@ -1905,6 +1994,7 @@ def fetch_cn_security_return_pct_daily_with_date(code, lookback_days=90, end_dat
                 trade_date = _extract_trade_date_from_row(out.loc[last_idx], date_col)
                 return float(pct_values.loc[last_idx]), trade_date, f"{source_name}_pct"
 
+    for out, source_name, date_col, close_col, _pct_col in normalized_frames:
         if close_col is None:
             continue
 
@@ -1916,7 +2006,16 @@ def fetch_cn_security_return_pct_daily_with_date(code, lookback_days=90, end_dat
             prev_close = float(out.iloc[-2][close_col])
             if prev_close != 0:
                 trade_date = _extract_trade_date_from_row(out.iloc[-1], date_col)
-                return (last_close / prev_close - 1.0) * 100.0, trade_date, f"{source_name}_close_calc"
+                return_pct = (last_close / prev_close - 1.0) * 100.0
+                source = f"{source_name}_close_calc"
+                _raise_if_suspicious_unadjusted_return(
+                    return_pct,
+                    market="CN",
+                    symbol=code,
+                    trade_date=trade_date,
+                    source=source,
+                )
+                return return_pct, trade_date, source
 
     raise RuntimeError(f"无法解析 A股/场内基金 {code} 在目标日期 {end_date_key} 之前的日线涨跌幅; {' | '.join(errors)}")
 
@@ -1954,12 +2053,13 @@ def fetch_hk_return_pct_akshare_daily_with_date(code, lookback_days=90, end_date
     errors = []
     frames = []
 
-    try:
-        df = ak.stock_hk_daily(symbol=hk_code, adjust="")
-        if df is not None and not df.empty:
-            frames.append((df, "ak_stock_hk_daily_sina"))
-    except Exception as e:
-        errors.append(f"stock_hk_daily_sina: {repr(e)}")
+    for adjust, suffix in (("", "raw"), ("qfq", "qfq"), ("hfq", "hfq")):
+        try:
+            df = ak.stock_hk_daily(symbol=hk_code, adjust=adjust)
+            if df is not None and not df.empty:
+                frames.append((df, f"ak_stock_hk_daily_sina_{suffix}"))
+        except Exception as e:
+            errors.append(f"stock_hk_daily_sina_{suffix}: {repr(e)}")
 
     try:
         try:
@@ -1974,6 +2074,7 @@ def fetch_hk_return_pct_akshare_daily_with_date(code, lookback_days=90, end_date
     if not frames:
         raise RuntimeError(f"港股日线返回空数据: {hk_code}; {' | '.join(errors)}")
 
+    normalized_frames = []
     for raw_df, source_name in frames:
         out = raw_df.copy()
         date_col = _pick_column(out, ["日期", "date", "Date"])
@@ -1988,6 +2089,9 @@ def fetch_hk_return_pct_akshare_daily_with_date(code, lookback_days=90, end_date
         if out.empty:
             continue
 
+        normalized_frames.append((out, source_name, date_col, close_col, pct_col))
+
+    for out, source_name, date_col, _close_col, pct_col in normalized_frames:
         if pct_col is not None:
             pct_values = pd.to_numeric(out[pct_col], errors="coerce")
             valid_idx = pct_values[pct_values.notna()].index
@@ -1996,6 +2100,15 @@ def fetch_hk_return_pct_akshare_daily_with_date(code, lookback_days=90, end_date
                 trade_date = _extract_trade_date_from_row(out.loc[last_idx], date_col)
                 return float(pct_values.loc[last_idx]), trade_date, f"{source_name}_pct"
 
+    adjusted_frames = [
+        item for item in normalized_frames
+        if "_qfq" in item[1].lower() or "_hfq" in item[1].lower()
+    ]
+    raw_frames = [
+        item for item in normalized_frames
+        if "_qfq" not in item[1].lower() and "_hfq" not in item[1].lower()
+    ]
+    for out, source_name, date_col, close_col, _pct_col in [*adjusted_frames, *raw_frames]:
         if close_col is None:
             continue
 
@@ -2007,7 +2120,16 @@ def fetch_hk_return_pct_akshare_daily_with_date(code, lookback_days=90, end_date
             prev_close = float(out.iloc[-2][close_col])
             if prev_close != 0:
                 trade_date = _extract_trade_date_from_row(out.iloc[-1], date_col)
-                return (last_close / prev_close - 1.0) * 100.0, trade_date, f"{source_name}_close_calc"
+                return_pct = (last_close / prev_close - 1.0) * 100.0
+                source = f"{source_name}_close_calc"
+                _raise_if_suspicious_unadjusted_return(
+                    return_pct,
+                    market="HK",
+                    symbol=hk_code,
+                    trade_date=trade_date,
+                    source=source,
+                )
+                return return_pct, trade_date, source
 
     raise RuntimeError(f"无法解析港股 {hk_code} 在目标日期 {end_date_key} 之前的日线涨跌幅; {' | '.join(errors)}")
 
@@ -2368,7 +2490,16 @@ def fetch_us_return_pct_akshare_daily_with_date(ticker, end_date=None):
     else:
         trade_date = ""
 
-    return (last_close / prev_close - 1.0) * 100.0, trade_date, "ak_stock_us_daily"
+    return_pct = (last_close / prev_close - 1.0) * 100.0
+    source = "ak_stock_us_daily"
+    _raise_if_suspicious_unadjusted_return(
+        return_pct,
+        market="US",
+        symbol=ticker,
+        trade_date=trade_date,
+        source=source,
+    )
+    return return_pct, trade_date, source
 
 
 def fetch_us_stock_return_pct_eastmoney_daily_with_date(ticker, end_date=None, lookback_days=80):
@@ -2421,16 +2552,28 @@ def fetch_us_stock_return_pct_eastmoney_daily_with_date(ticker, end_date=None, l
                 parts = str(item).split(",")
                 if len(parts) < 3:
                     continue
-                rows.append({"date": parts[0], "close": parts[2]})
+                row = {"date": parts[0], "close": parts[2]}
+                if len(parts) > 8:
+                    row["pct_chg"] = parts[8]
+                rows.append(row)
 
             out = pd.DataFrame(rows)
             if out.empty:
                 errors.append(f"{secid}: parsed empty")
                 continue
             out["date"] = pd.to_datetime(out["date"], errors="coerce")
-            out["close"] = pd.to_numeric(out["close"], errors="coerce")
-            out = out.dropna(subset=["date", "close"]).sort_values("date")
+            out = out.dropna(subset=["date"]).sort_values("date")
             out = _drop_rows_after_target_date(out, out["date"], end_date_key)
+            if "pct_chg" in out.columns:
+                pct_values = pd.to_numeric(out["pct_chg"], errors="coerce")
+                valid_idx = pct_values[pct_values.notna()].index
+                if len(valid_idx) > 0:
+                    last_idx = valid_idx[-1]
+                    trade_date = pd.Timestamp(out.loc[last_idx, "date"]).strftime("%Y-%m-%d")
+                    return float(pct_values.loc[last_idx]), trade_date, f"eastmoney_us_hist_daily_{market_prefix}_pct"
+
+            out["close"] = pd.to_numeric(out["close"], errors="coerce")
+            out = out.dropna(subset=["close"]).sort_values("date")
 
             if len(out) < 2:
                 errors.append(f"{secid}: valid close count < 2")
@@ -2443,7 +2586,16 @@ def fetch_us_stock_return_pct_eastmoney_daily_with_date(ticker, end_date=None, l
                 continue
 
             trade_date = pd.Timestamp(out.iloc[-1]["date"]).strftime("%Y-%m-%d")
-            return (last_close / prev_close - 1.0) * 100.0, trade_date, f"eastmoney_us_hist_daily_{market_prefix}"
+            return_pct = (last_close / prev_close - 1.0) * 100.0
+            source = f"eastmoney_us_hist_daily_{market_prefix}"
+            _raise_if_suspicious_unadjusted_return(
+                return_pct,
+                market="US",
+                symbol=symbol,
+                trade_date=trade_date,
+                source=source,
+            )
+            return return_pct, trade_date, source
         except Exception as exc:
             errors.append(f"{secid}: {repr(exc)}")
 
@@ -2495,9 +2647,11 @@ def fetch_us_stock_return_pct_yahoo_daily_with_date(ticker, end_date=None, lookb
             timestamps = result.get("timestamp") or []
             quote = (result.get("indicators", {}).get("quote") or [{}])[0]
             closes = quote.get("close") or []
+            adjclose_items = result.get("indicators", {}).get("adjclose") or []
+            adjcloses = (adjclose_items[0].get("adjclose") if adjclose_items else None) or []
 
             rows = []
-            for ts, close in zip(timestamps, closes):
+            for idx, (ts, close) in enumerate(zip(timestamps, closes)):
                 if close is None:
                     continue
                 try:
@@ -2506,10 +2660,18 @@ def fetch_us_stock_return_pct_yahoo_daily_with_date(ticker, end_date=None, lookb
                     continue
                 if close_f <= 0:
                     continue
-                rows.append({
+                row = {
                     "date": datetime.utcfromtimestamp(int(ts)).strftime("%Y-%m-%d"),
                     "close": close_f,
-                })
+                }
+                if idx < len(adjcloses) and adjcloses[idx] is not None:
+                    try:
+                        adjclose_f = float(adjcloses[idx])
+                    except Exception:
+                        adjclose_f = None
+                    if adjclose_f is not None and adjclose_f > 0:
+                        row["adjclose"] = adjclose_f
+                rows.append(row)
 
             out = pd.DataFrame(rows).dropna(subset=["close"]).sort_values("date")
             if end_date_key and not out.empty:
@@ -2517,13 +2679,30 @@ def fetch_us_stock_return_pct_yahoo_daily_with_date(ticker, end_date=None, lookb
             if len(out) < 2:
                 raise RuntimeError(f"Yahoo 日线在目标日期 {end_date_key or 'latest'} 前有效数据不足: {symbol}")
 
-            last_close = float(out.iloc[-1]["close"])
-            prev_close = float(out.iloc[-2]["close"])
+            price_col = "close"
+            source = "yahoo_chart_daily_us_fallback"
+            if "adjclose" in out.columns:
+                adj_out = out.dropna(subset=["adjclose"]).copy()
+                if len(adj_out) >= 2:
+                    out = adj_out
+                    price_col = "adjclose"
+                    source = "yahoo_chart_adjclose_daily_us_fallback"
+
+            last_close = float(out.iloc[-1][price_col])
+            prev_close = float(out.iloc[-2][price_col])
             if prev_close == 0:
                 raise RuntimeError(f"Yahoo 前一交易日收盘价为 0: {symbol}")
 
             trade_date = str(out.iloc[-1]["date"])
-            return (last_close / prev_close - 1.0) * 100.0, trade_date, "yahoo_chart_daily_us_fallback"
+            return_pct = (last_close / prev_close - 1.0) * 100.0
+            _raise_if_suspicious_unadjusted_return(
+                return_pct,
+                market="US",
+                symbol=symbol,
+                trade_date=trade_date,
+                source=source,
+            )
+            return return_pct, trade_date, source
 
         except Exception as exc:
             last_error = exc
@@ -5789,6 +5968,10 @@ def _draw_benchmark_table(
     down_color,
     neutral_color,
     column_widths=None,
+    column_width_by_name=None,
+    body_bg="white",
+    scale_x=1.0,
+    scale_y=1.18,
 ):
     table = ax.table(
         cellText=benchmark_df.values,
@@ -5800,7 +5983,7 @@ def _draw_benchmark_table(
     )
     table.auto_set_font_size(False)
     table.set_fontsize(fontsize)
-    table.scale(1.0, 1.18)
+    table.scale(scale_x, scale_y)
 
     value_col_idx = None
     for candidate in ("模型观察", "区间模型观察"):
@@ -5813,6 +5996,8 @@ def _draw_benchmark_table(
         "模型观察": 0.20,
         "基准日或区间": 0.38,
     }
+    if isinstance(column_width_by_name, dict):
+        default_width_by_name.update(column_width_by_name)
     if column_widths is not None and len(column_widths) != len(benchmark_df.columns):
         column_widths = None
 
@@ -5824,7 +6009,7 @@ def _draw_benchmark_table(
             cell.set_facecolor(header_bg)
             cell.set_text_props(color=header_text_color, weight="bold")
         else:
-            cell.set_facecolor("white")
+            cell.set_facecolor(body_bg)
             if value_col_idx is not None and col == value_col_idx:
                 raw_val = raw_values[row - 1] if row - 1 < len(raw_values) else None
                 if raw_val is None or pd.isna(raw_val):
@@ -5869,8 +6054,17 @@ def save_fund_estimate_table_image(
     header_bg="#3f4d66",
     header_text_color="white",
     grid_color="#d9d9d9",
+    body_bg="white",
+    figure_bg="white",
     figure_width=None,
     row_height=0.45,
+    table_fontsize=17,
+    table_scale_x=1.0,
+    table_scale_y=1.22,
+    benchmark_table_scale_x=1.0,
+    benchmark_table_scale_y=1.18,
+    column_width_by_name=None,
+    benchmark_column_width_by_name=None,
     footnote_text="依据基金季度报告前十大持仓股及指数估算，仅供学习记录，不构成投资建议；最终以基金公司更新为准。",
     footnote_color="#666666",
     footnote_fontsize=15,
@@ -5956,6 +6150,8 @@ def save_fund_estimate_table_image(
         fig_w = figure_width
 
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+    fig.patch.set_facecolor(figure_bg)
+    ax.set_facecolor(figure_bg)
     ax.axis("off")
 
     # 让轴区域占据大部分画布；标题和备注位置后续根据表格边界计算。
@@ -5986,8 +6182,8 @@ def save_fund_estimate_table_image(
     )
 
     table.auto_set_font_size(False)
-    table.set_fontsize(17)
-    table.scale(1.0, 1.22)
+    table.set_fontsize(table_fontsize)
+    table.scale(table_scale_x, table_scale_y)
 
     est_col_idx = list(table_df.columns).index(estimate_display_col_name)
 
@@ -5999,7 +6195,7 @@ def save_fund_estimate_table_image(
             cell.set_facecolor(header_bg)
             cell.set_text_props(color=header_text_color, weight="bold")
         else:
-            cell.set_facecolor("white")
+            cell.set_facecolor(body_bg)
 
             if col == est_col_idx:
                 raw_val = result_df.iloc[row - 1][estimate_col_name]
@@ -6027,6 +6223,8 @@ def save_fund_estimate_table_image(
         "限购金额": 0.15,
         "估算方式": 0.16,
     }
+    if isinstance(column_width_by_name, dict):
+        col_width_by_name.update(column_width_by_name)
 
     for (row, col), cell in table.get_celld().items():
         if col < len(table_df.columns):
@@ -6055,7 +6253,7 @@ def save_fund_estimate_table_image(
             benchmark_table_df,
             benchmark_raw_values,
             benchmark_bbox,
-            fontsize=17,
+            fontsize=benchmark_footer_fontsize,
             header_bg=header_bg,
             header_text_color=header_text_color,
             grid_color=grid_color,
@@ -6063,6 +6261,10 @@ def save_fund_estimate_table_image(
             down_color=down_color,
             neutral_color=neutral_color,
             column_widths=benchmark_column_widths,
+            column_width_by_name=benchmark_column_width_by_name,
+            body_bg=body_bg,
+            scale_x=benchmark_table_scale_x,
+            scale_y=benchmark_table_scale_y,
         )
         separator_y = benchmark_bbox[1] + benchmark_bbox[3] + max(benchmark_gap * 0.5, 0.003)
         separator_artists.extend(

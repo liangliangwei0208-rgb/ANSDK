@@ -11,7 +11,7 @@ import math
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageColor, ImageDraw, ImageFont
 
 from tools.paths import MARK_IMAGE
 
@@ -202,7 +202,10 @@ def add_brand_text_watermark(
     output_file: str | Path,
     *,
     text: str = BRAND_WATERMARK_TEXT,
+    font_size: int = 85,
+    color: str = "#000000",
     alpha: float = 0.11,
+    rotation: int = 28,
 ) -> None:
     """
     在 safe 输出图上叠加淡斜向品牌文字水印。
@@ -216,9 +219,12 @@ def add_brand_text_watermark(
     image = Image.open(path).convert("RGBA")
     width, height = image.size
     overlay = Image.new("RGBA", image.size, (255, 255, 255, 0))
-    font_size = 85
     font = get_watermark_font(font_size)
     text_alpha = max(0, min(255, int(255 * float(alpha))))
+    try:
+        red, green, blue = ImageColor.getrgb(str(color))[:3]
+    except Exception:
+        red, green, blue = (0, 0, 0)
 
     temp = Image.new("RGBA", (1, 1), (255, 255, 255, 0))
     temp_draw = ImageDraw.Draw(temp)
@@ -237,11 +243,11 @@ def add_brand_text_watermark(
         (pad - bbox[0], pad - bbox[1]),
         text,
         font=font,
-        fill=(0, 0, 0, text_alpha),
+        fill=(red, green, blue, text_alpha),
     )
 
     resample_filter = Image.Resampling.BICUBIC if hasattr(Image, "Resampling") else Image.BICUBIC
-    text_patch = text_patch.rotate(28, expand=True, resample=resample_filter)
+    text_patch = text_patch.rotate(rotation, expand=True, resample=resample_filter)
 
     centers = []
     y_ratios = [0.24, 0.42, 0.60, 0.78]
@@ -274,8 +280,30 @@ def apply_safe_public_watermarks(output_file: str | Path) -> None:
     brand text is layered over it.  Safe scripts should call this helper instead
     of repeating the two watermark calls.
     """
-    add_center_image_watermark(output_file)
-    add_brand_text_watermark(output_file)
+    try:
+        from tools.configs.safe_image_style_configs import safe_watermark_style
+
+        watermark_style = safe_watermark_style()
+    except Exception:
+        watermark_style = {}
+
+    center_image_style = watermark_style.get("center_image", {})
+    brand_text_style = watermark_style.get("brand_text", {})
+
+    add_center_image_watermark(
+        output_file,
+        alpha=center_image_style.get("alpha", 0.12),
+        width_ratio=center_image_style.get("width_ratio", 0.42),
+        height_ratio=center_image_style.get("height_ratio", 0.42),
+    )
+    add_brand_text_watermark(
+        output_file,
+        text=brand_text_style.get("text", BRAND_WATERMARK_TEXT),
+        font_size=brand_text_style.get("font_size", 85),
+        color=brand_text_style.get("color", "#000000"),
+        alpha=brand_text_style.get("alpha", 0.11),
+        rotation=brand_text_style.get("rotation", 28),
+    )
 
 
 __all__ = [

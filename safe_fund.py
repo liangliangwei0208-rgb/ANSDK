@@ -23,6 +23,7 @@ from typing import Any
 
 import pandas as pd
 from tools.configs.market_benchmark_configs import MARKET_BENCHMARK_ITEMS
+from tools.configs.safe_image_style_configs import SAFE_TITLE_STYLE, safe_daily_table_kwargs
 from tools.fund_table_image import save_fund_estimate_table_image
 from tools.fund_universe import HAIWAI_FUND_CODES
 from tools.paths import (
@@ -250,11 +251,19 @@ def get_benchmark_footer_items(
     只取与基金缓存同一 valuation_date 的记录，避免基金和基准日期错位。
     """
     enabled_specs = []
+    disabled_symbols = set()
+    disabled_labels = set()
     for order, spec in enumerate(MARKET_BENCHMARK_ITEMS, start=1):
-        if not isinstance(spec, dict) or not bool(spec.get("enabled", True)):
+        if not isinstance(spec, dict):
             continue
         label = str(spec.get("label", "")).strip()
         symbol = str(spec.get("ticker", "")).strip().upper()
+        if not bool(spec.get("enabled", True)):
+            if symbol:
+                disabled_symbols.add(symbol)
+            if label:
+                disabled_labels.add(label)
+            continue
         if not label or not symbol:
             continue
         enabled_specs.append({
@@ -281,8 +290,9 @@ def get_benchmark_footer_items(
             continue
 
         symbol = str(item.get("symbol", "")).strip().upper()
+        label = str(item.get("label", "")).strip()
         return_pct = safe_float_or_none(item.get("return_pct"))
-        if not symbol:
+        if not symbol or symbol in disabled_symbols or label in disabled_labels:
             continue
 
         old = selected_by_symbol.get(symbol)
@@ -316,7 +326,13 @@ def get_benchmark_footer_items(
     for item in selected_by_symbol.values():
         symbol = str(item.get("symbol", "")).strip().upper()
         label = str(item.get("label", "")).strip() or symbol
-        if not symbol or symbol in used_symbols or label in used_labels:
+        if (
+            not symbol
+            or symbol in disabled_symbols
+            or label in disabled_labels
+            or symbol in used_symbols
+            or label in used_labels
+        ):
             continue
         used_labels.add(label)
         footer_items.append(
@@ -351,10 +367,39 @@ def save_haiwai_safe_table(
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     title = f"海外基金模型估算观察 估值日：{valuation_date} 生成：{generated_at}"
     title_segments = [
-        {"text": "海外基金模型估算观察  ", "color": "black", "fontweight": "bold"},
-        {"text": f"估值日：{valuation_date}", "color": "red", "fontweight": "bold"},
-        {"text": f"  生成：{generated_at}", "color": "black", "fontweight": "bold"},
+        {
+            "text": "海外基金模型估算观察  ",
+            "color": SAFE_TITLE_STYLE["color"],
+            "fontweight": SAFE_TITLE_STYLE["fontweight"],
+            "fontsize": SAFE_TITLE_STYLE["fontsize"],
+        },
+        {
+            "text": f"估值日：{valuation_date}",
+            "color": SAFE_TITLE_STYLE["highlight_color"],
+            "fontweight": SAFE_TITLE_STYLE["fontweight"],
+            "fontsize": SAFE_TITLE_STYLE["fontsize"],
+        },
+        {
+            "text": f"  生成：{generated_at}",
+            "color": SAFE_TITLE_STYLE["color"],
+            "fontweight": SAFE_TITLE_STYLE["fontweight"],
+            "fontsize": SAFE_TITLE_STYLE["fontsize"],
+        },
     ]
+    image_kwargs = safe_daily_table_kwargs()
+    image_kwargs.update(
+        {
+            "footnote_text": (
+                "依据基金季度报告前十大持仓股及指数估算，仅供学习记录，"
+                "不构成投资建议；最终以基金公司更新为准。"
+            ),
+            # safe 系列统一由 tools.safe_display.apply_safe_public_watermarks()
+            # 叠加居中 logo 和斜向文字水印，这里关闭表格函数内置平铺水印。
+            "watermark_text": "",
+            "watermark_alpha": 0,
+            "watermark_fontsize": 32,
+        }
+    )
     save_fund_estimate_table_image(
         result_df=image_df,
         output_file=output_file,
@@ -362,18 +407,8 @@ def save_haiwai_safe_table(
         title_segments=title_segments,
         display_column_names={ESTIMATE_RETURN_COLUMN: DISPLAY_OBSERVATION_COLUMN},
         benchmark_footer_items=benchmark_footer_items,
-        benchmark_footer_fontsize=15,
-        footnote_text=(
-            "依据基金季度报告前十大持仓股及指数估算，仅供学习记录，"
-            "不构成投资建议；最终以基金公司更新为准。"
-        ),
-        watermark_text="",
-        watermark_alpha=0,
-        watermark_fontsize=32,
-        up_color="red",
-        down_color="green",
         pct_digits=2,
-        row_height=0.55,
+        **image_kwargs,
     )
     apply_safe_public_watermarks(output_file)
     log(f"海外基金安全版预估表生成完成: {output_file}，缓存日期: {valuation_date}")

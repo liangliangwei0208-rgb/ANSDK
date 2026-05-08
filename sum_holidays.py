@@ -28,6 +28,10 @@ from safe_holidays import (
     build_safe_summary_df,
 )
 from tools.configs.market_benchmark_configs import MARKET_BENCHMARK_ITEMS
+from tools.configs.safe_image_style_configs import (
+    safe_cumulative_table_kwargs,
+    safe_daily_table_kwargs,
+)
 from tools.fund_estimate_history_overseas import (
     build_benchmark_cumulative_dataframe,
     build_cumulative_dataframe,
@@ -360,6 +364,16 @@ def _daily_benchmark_footer_items(benchmark_daily_df: pd.DataFrame) -> list[dict
         for order, item in enumerate(MARKET_BENCHMARK_ITEMS, start=1)
         if isinstance(item, dict) and bool(item.get("enabled", True))
     }
+    disabled_symbols = {
+        str(item.get("ticker", "")).strip().upper()
+        for item in MARKET_BENCHMARK_ITEMS
+        if isinstance(item, dict) and not bool(item.get("enabled", True))
+    }
+    disabled_labels = {
+        str(item.get("label", "")).strip()
+        for item in MARKET_BENCHMARK_ITEMS
+        if isinstance(item, dict) and not bool(item.get("enabled", True))
+    }
     config_labels = {
         str(item.get("label", "")).strip()
         for item in MARKET_BENCHMARK_ITEMS
@@ -375,6 +389,8 @@ def _daily_benchmark_footer_items(benchmark_daily_df: pd.DataFrame) -> list[dict
             continue
         label = str(row.get("label", row.get("symbol", "基准"))).strip() or "基准"
         symbol = str(row.get("symbol", "")).strip()
+        if symbol.upper() in disabled_symbols or label in disabled_labels:
+            continue
         if symbol.upper() not in sort_order and label in config_labels:
             continue
         items.append(
@@ -452,6 +468,17 @@ def _save_daily_images(
     _print_daily_estimate_table(result_df, title, benchmark_items, pct_digits=2)
 
     safe_df = _safe_daily_result_dataframe(result_df)
+    image_kwargs = safe_daily_table_kwargs()
+    image_kwargs.update(
+        {
+            "footnote_text": FOOTNOTE_TEXT,
+            # safe 系列统一由 tools.safe_display.apply_safe_public_watermarks()
+            # 叠加居中 logo 和斜向文字水印，这里关闭表格函数内置平铺水印。
+            "watermark_text": "",
+            "watermark_alpha": 0,
+            "watermark_fontsize": 32,
+        }
+    )
     save_fund_estimate_table_image(
         result_df=safe_df,
         output_file=SAFE_OUTPUT_FILE,
@@ -459,13 +486,7 @@ def _save_daily_images(
         pct_digits=2,
         display_column_names=SAFE_DAILY_DISPLAY_COLUMN_NAMES,
         benchmark_footer_items=benchmark_items,
-        footnote_text=FOOTNOTE_TEXT,
-        watermark_text="",
-        watermark_alpha=0,
-        watermark_fontsize=32,
-        up_color="red",
-        down_color="green",
-        row_height=0.55,
+        **image_kwargs,
     )
     apply_safe_public_watermarks(SAFE_OUTPUT_FILE)
     print(f"安全版图片已生成: {SAFE_OUTPUT_FILE}")
@@ -481,6 +502,17 @@ def _save_safe_image(
         columns={CUMULATIVE_DISPLAY_COLUMN: CUMULATIVE_INTERNAL_COLUMN}
     )
 
+    image_kwargs = safe_cumulative_table_kwargs()
+    image_kwargs.update(
+        {
+            "footnote_text": FOOTNOTE_TEXT,
+            # safe 系列统一由 tools.safe_display.apply_safe_public_watermarks()
+            # 叠加居中 logo 和斜向文字水印，这里关闭表格函数内置平铺水印。
+            "watermark_text": "",
+            "watermark_alpha": 0,
+            "watermark_fontsize": 32,
+        }
+    )
     save_cumulative_estimate_table_image(
         summary_df=image_summary_df,
         output_file=SAFE_OUTPUT_FILE,
@@ -489,13 +521,7 @@ def _save_safe_image(
         display_column_names=DISPLAY_COLUMN_NAMES,
         benchmark_summary_df=benchmark_summary_df,
         hide_status_column=True,
-        footnote_text=FOOTNOTE_TEXT,
-        watermark_text="",
-        watermark_alpha=0,
-        watermark_fontsize=32,
-        up_color="red",
-        down_color="green",
-        row_height=0.55,
+        **image_kwargs,
     )
     apply_safe_public_watermarks(SAFE_OUTPUT_FILE)
     print(f"安全版图片已生成: {SAFE_OUTPUT_FILE}")

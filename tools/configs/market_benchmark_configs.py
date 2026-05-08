@@ -6,12 +6,14 @@
 - 列表顺序就是图片里的显示顺序。
 
 怎么改：
-- 想临时隐藏某个基准，把 `enabled` 改成 False。
+- 想临时隐藏某个基准，把 `enabled` 改成 False；隐藏后即使缓存里还有旧记录，
+  safe 图也不会继续展示它。
 - 想新增一个基准，复制一行字典，改 `label`、`kind`、`ticker`。
 - 不要在这里写复杂公式或权重；这里只维护“显示什么”和“用什么代码取行情”。
 
 字段说明：
-- enabled：True 表示显示，False 表示暂时不显示。
+- enabled：True 表示显示，False 表示暂时不显示。False 只是不显示/不再主动拉取，
+  不会删除历史缓存。
 - label：图片里显示的名称。
 - kind：行情获取类型。
     - "us_index"：美股指数，适合 .NDX、.INX、.SOX 这类新浪美股指数代码。
@@ -32,9 +34,9 @@ MARKET_BENCHMARK_ITEMS = [
     {"enabled": True, "label": "纳斯达克100", "kind": "us_index", "ticker": ".NDX"},
     {"enabled": True, "label": "标普500", "kind": "us_index", "ticker": ".INX"},
     {"enabled": True, "label": "油气开采指数", "kind": "us_security", "ticker": "XOP"},
-    {"enabled": True, "label": "VIX恐慌指数", "kind": "yahoo", "ticker": "^VIX"},
     {"enabled": True, "label": "费城半导体", "kind": "us_index", "ticker": ".SOX"},
     {"enabled": True, "label": "现货黄金", "kind": "foreign_futures", "ticker": "XAU", "fallback_ticker": "GC00Y"},
+    {"enabled": False, "label": "VIX恐慌指数", "kind": "yahoo", "ticker": "^VIX"},
 ]
 
 

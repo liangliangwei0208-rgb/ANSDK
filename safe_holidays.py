@@ -19,6 +19,7 @@ safe_holidays.py
 from __future__ import annotations
 
 import pandas as pd
+from tools.configs.safe_image_style_configs import safe_cumulative_table_kwargs
 from tools.paths import SAFE_HOLIDAYS_IMAGE, ensure_runtime_dirs, relative_path_str
 from tools.safe_display import apply_safe_public_watermarks, mask_fund_name
 
@@ -135,6 +136,21 @@ def main() -> None:
         display_column_names={CUMULATIVE_INTERNAL_COLUMN: CUMULATIVE_DISPLAY_COLUMN},
     )
 
+    image_kwargs = safe_cumulative_table_kwargs()
+    image_kwargs.update(
+        {
+            "footnote_text": (
+                "依据基金季度报告前十大持仓股及指数估算，仅供学习记录，"
+                "不构成投资建议；最终以基金公司更新为准。"
+            ),
+            # safe 系列统一由 tools.safe_display.apply_safe_public_watermarks()
+            # 叠加居中 logo 和斜向文字水印，这里关闭表格函数内置平铺水印。
+            "watermark_text": "",
+            "watermark_alpha": 0,
+            "watermark_fontsize": 32,
+        }
+    )
+
     save_cumulative_estimate_table_image(
         summary_df=image_summary_df,
         output_file=output_file,
@@ -143,16 +159,7 @@ def main() -> None:
         display_column_names={CUMULATIVE_INTERNAL_COLUMN: CUMULATIVE_DISPLAY_COLUMN},
         benchmark_summary_df=benchmark_summary_df,
         hide_status_column=True,
-        footnote_text=(
-            "依据基金季度报告前十大持仓股及指数估算，仅供学习记录，"
-            "不构成投资建议；最终以基金公司更新为准。"
-        ),
-        watermark_text="",
-        watermark_alpha=0,
-        watermark_fontsize=32,
-        up_color="red",
-        down_color="green",
-        row_height=0.55,
+        **image_kwargs,
     )
     apply_safe_public_watermarks(output_file)
 

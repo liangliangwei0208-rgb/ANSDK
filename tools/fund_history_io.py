@@ -787,6 +787,21 @@ def _enabled_benchmark_config_rows() -> list[dict]:
     return rows
 
 
+def _disabled_benchmark_config_sets() -> tuple[set[str], set[str]]:
+    symbols = set()
+    labels = set()
+    for item in MARKET_BENCHMARK_ITEMS:
+        if not isinstance(item, dict) or bool(item.get("enabled", True)):
+            continue
+        symbol = str(item.get("ticker", "")).strip().upper()
+        label = str(item.get("label", "")).strip()
+        if symbol:
+            symbols.add(symbol)
+        if label:
+            labels.add(label)
+    return symbols, labels
+
+
 def _empty_benchmark_cumulative_dataframe() -> pd.DataFrame:
     return pd.DataFrame(
         columns=[
@@ -810,6 +825,7 @@ def build_benchmark_cumulative_dataframe(benchmark_daily_df: pd.DataFrame) -> pd
     label_map = {row["symbol"]: row["label"] for row in config_rows}
     config_symbols = set(order_map)
     config_labels = {row["label"] for row in config_rows}
+    disabled_symbols, disabled_labels = _disabled_benchmark_config_sets()
 
     if benchmark_daily_df is None or benchmark_daily_df.empty:
         out = _empty_benchmark_cumulative_dataframe()
@@ -851,6 +867,8 @@ def build_benchmark_cumulative_dataframe(benchmark_daily_df: pd.DataFrame) -> pd
         label = label_map.get(symbol_norm, str(symbol))
         if "label" in g.columns and g["label"].notna().any():
             label = str(g["label"].dropna().iloc[-1])
+        if symbol_norm in disabled_symbols or label in disabled_labels:
+            continue
         if symbol_norm not in config_symbols and label in config_labels:
             continue
 
@@ -1022,6 +1040,10 @@ def _draw_benchmark_table(
     down_color,
     neutral_color,
     column_widths=None,
+    column_width_by_name=None,
+    body_bg="white",
+    scale_x=1.0,
+    scale_y=1.18,
 ):
     table = ax.table(
         cellText=benchmark_df.values,
@@ -1033,7 +1055,7 @@ def _draw_benchmark_table(
     )
     table.auto_set_font_size(False)
     table.set_fontsize(fontsize)
-    table.scale(1.0, 1.18)
+    table.scale(scale_x, scale_y)
 
     value_col_idx = None
     for candidate in ("模型观察", "区间模型观察"):
@@ -1051,6 +1073,8 @@ def _draw_benchmark_table(
         "起始估值日": 0.13,
         "结束估值日": 0.13,
     }
+    if isinstance(column_width_by_name, dict):
+        default_width_by_name.update(column_width_by_name)
     if column_widths is not None and len(column_widths) != len(benchmark_df.columns):
         column_widths = None
 
@@ -1061,7 +1085,7 @@ def _draw_benchmark_table(
             cell.set_facecolor(header_bg)
             cell.set_text_props(color=header_text_color, weight="bold")
         else:
-            cell.set_facecolor("white")
+            cell.set_facecolor(body_bg)
             if value_col_idx is not None and col == value_col_idx:
                 raw_val = raw_values[row - 1] if row - 1 < len(raw_values) else None
                 if raw_val is None or pd.isna(raw_val):
@@ -1104,8 +1128,17 @@ def save_cumulative_estimate_table_image(
     header_bg: str = "#3f4d66",
     header_text_color: str = "white",
     grid_color: str = "#d9d9d9",
+    body_bg: str = "white",
+    figure_bg: str = "white",
     figure_width=None,
     row_height: float = 0.55,
+    table_fontsize: int = 15,
+    table_scale_x: float = 1.0,
+    table_scale_y: float = 1.22,
+    benchmark_table_scale_x: float = 1.0,
+    benchmark_table_scale_y: float = 1.18,
+    column_width_by_name: dict[str, float] | None = None,
+    benchmark_column_width_by_name: dict[str, float] | None = None,
     footnote_text: str = "依据基金季度报告前十大持仓股及指数估算，仅供学习记录，不构成投资建议；最终以基金公司更新为准。",
     footnote_color: str = "#666666",
     footnote_fontsize: int = 14,
@@ -1116,11 +1149,12 @@ def save_cumulative_estimate_table_image(
     title_fontsize: int = 20,
     title_color: str = "black",
     title_fontweight: str = "bold",
+    title_gap: float = 0.018,
     pad_inches: float = 0.14,
     hide_status_column: bool = True,
     benchmark_summary_df: pd.DataFrame | None = None,
     show_benchmark_footer: bool = True,
-    benchmark_footer_fontsize: int = 14,
+    benchmark_footer_fontsize: int = 15,
     display_column_names: dict[str, str] | None = None,
 ):
     """
@@ -1216,6 +1250,8 @@ def save_cumulative_estimate_table_image(
         fig_w = figure_width
 
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+    fig.patch.set_facecolor(figure_bg)
+    ax.set_facecolor(figure_bg)
     ax.axis("off")
     fig.subplots_adjust(left=0.015, right=0.985, top=0.985, bottom=0.015)
 
@@ -1240,8 +1276,8 @@ def save_cumulative_estimate_table_image(
     )
 
     table.auto_set_font_size(False)
-    table.set_fontsize(15)
-    table.scale(1.0, 1.22)
+    table.set_fontsize(table_fontsize)
+    table.scale(table_scale_x, table_scale_y)
 
     ret_col_idx = (
         list(table_df.columns).index(cumulative_display_col_name)
@@ -1257,7 +1293,7 @@ def save_cumulative_estimate_table_image(
             cell.set_facecolor(header_bg)
             cell.set_text_props(color=header_text_color, weight="bold")
         else:
-            cell.set_facecolor("white")
+            cell.set_facecolor(body_bg)
 
             if ret_col_idx is not None and col == ret_col_idx:
                 raw_val = raw_returns.iloc[row - 1] if row - 1 < len(raw_returns) else None
@@ -1291,6 +1327,8 @@ def save_cumulative_estimate_table_image(
 
     if not hide_status_column:
         col_width_by_name["记录状态"] = 0.10
+    if isinstance(column_width_by_name, dict):
+        col_width_by_name.update(column_width_by_name)
 
     for (row, col), cell in table.get_celld().items():
         if col < len(table_df.columns):
@@ -1319,7 +1357,7 @@ def save_cumulative_estimate_table_image(
             benchmark_table_df,
             benchmark_raw_values,
             benchmark_bbox,
-            fontsize=15,
+            fontsize=benchmark_footer_fontsize,
             header_bg=header_bg,
             header_text_color=header_text_color,
             grid_color=grid_color,
@@ -1327,6 +1365,10 @@ def save_cumulative_estimate_table_image(
             down_color=down_color,
             neutral_color=neutral_color,
             column_widths=benchmark_column_widths,
+            column_width_by_name=benchmark_column_width_by_name,
+            body_bg=body_bg,
+            scale_x=benchmark_table_scale_x,
+            scale_y=benchmark_table_scale_y,
         )
         separator_y = benchmark_bbox[1] + benchmark_bbox[3] + max(benchmark_gap * 0.5, 0.003)
         separator_artists.extend(
@@ -1376,7 +1418,7 @@ def save_cumulative_estimate_table_image(
     if title:
         title_artist = fig.text(
             0.5,
-            min(0.985, table_bbox_fig.y1 + 0.018),
+            min(0.985, table_bbox_fig.y1 + title_gap),
             title,
             ha="center",
             va="bottom",
