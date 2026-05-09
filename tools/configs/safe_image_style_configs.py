@@ -48,6 +48,32 @@ SAFE_TITLE_STYLE = {
 }
 
 
+# 画布外边距。
+# 影响范围：
+# - safe_haiwai_fund.png 的图片四周留白
+# - safe_sum_holidays.png 的节后第 1 天单日观察图
+#
+# 这些参数控制的是“图片边缘到内容”的外部留白，不是标题到表格的距离。
+# 如果你觉得最上方空白太高，优先调小 daily_top_pad_inches。
+# 如果你觉得底部免责声明下面空白太高，优先调小 daily_bottom_pad_inches。
+#
+# 调参建议：
+# - daily_pad_inches：每日图默认外边距。单位是英寸，不是像素；调大会让四周更宽。
+# - daily_top_pad_inches：每日图顶部外边距。调小后，图片最上方到标题更近。
+# - daily_bottom_pad_inches：每日图底部外边距。调小后，图片最下方到备注更近。
+# - daily_left_pad_inches / daily_right_pad_inches：左右外边距。调小后，内容更接近图片左右边。
+# - 留空 None 表示沿用 daily_pad_inches；写具体数值可以单独控制某一侧。
+# - 推荐范围：顶部 0.02-0.12；底部/左右 0.08-0.18。过小可能让文字贴边。
+# - 想恢复某一侧默认观感，可以把对应项改回 daily_pad_inches 的值，或直接写 None。
+SAFE_CANVAS_STYLE = {
+    "daily_pad_inches": 0.15,
+    "daily_top_pad_inches": 0.45,
+    "daily_bottom_pad_inches": 0.35,
+    "daily_left_pad_inches": 0.15,
+    "daily_right_pad_inches": 0.15,
+}
+
+
 # 表格主体样式。
 # 影响范围：
 # - safe 系列主表
@@ -234,6 +260,11 @@ def safe_daily_table_kwargs() -> dict:
         "title_gap_ratio": SAFE_TITLE_STYLE["daily_gap_ratio"],
         "title_gap_min": SAFE_TITLE_STYLE["daily_gap_min"],
         "title_gap_max": SAFE_TITLE_STYLE["daily_gap_max"],
+        "pad_inches": SAFE_CANVAS_STYLE["daily_pad_inches"],
+        "top_pad_inches": SAFE_CANVAS_STYLE["daily_top_pad_inches"],
+        "bottom_pad_inches": SAFE_CANVAS_STYLE["daily_bottom_pad_inches"],
+        "left_pad_inches": SAFE_CANVAS_STYLE["daily_left_pad_inches"],
+        "right_pad_inches": SAFE_CANVAS_STYLE["daily_right_pad_inches"],
         "header_bg": style["header_bg"],
         "header_text_color": style["header_text_color"],
         "body_bg": style["body_bg"],

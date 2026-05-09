@@ -1163,7 +1163,7 @@ def save_cumulative_estimate_table_image(
     benchmark_table_scale_y: float = 1.18,
     column_width_by_name: dict[str, float] | None = None,
     benchmark_column_width_by_name: dict[str, float] | None = None,
-    footnote_text: str = "依据基金季度报告前十大持仓股及指数估算，仅供学习记录，不构成投资建议；最终以基金公司更新为准。",
+    footnote_text: str = "依据基金季度报告前十大持仓股及指数估算，最终以基金公司更新为准。",
     footnote_color: str = "#666666",
     footnote_fontsize: int = 14,
     compliance_notice_text: str = "个人模型，数据来源于网络公开资料，不构成任何投资建议",

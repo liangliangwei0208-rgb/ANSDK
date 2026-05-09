@@ -74,6 +74,7 @@ import akshare as ak
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import AnchoredOffsetbox, HPacker, TextArea, VPacker
+from matplotlib.transforms import Bbox
 
 from pathlib import Path
 from io import StringIO
@@ -6411,6 +6412,10 @@ def save_fund_estimate_table_image(
     footnote_gap_min=0.008,
     footnote_gap_max=0.026,
     pad_inches=0.12,
+    top_pad_inches=None,
+    bottom_pad_inches=None,
+    left_pad_inches=None,
+    right_pad_inches=None,
 ):
     """
     保存基金预估收益表格图片。
@@ -6427,6 +6432,8 @@ def save_fund_estimate_table_image(
         0 或失败：neutral_color
 
     title_gap_* 和 footnote_gap_* 控制标题、备注与表格边界的自适应距离。
+    pad_inches 控制整张图导出时的默认外边距；top/bottom/left/right_pad_inches
+    可以单独覆盖某一侧，safe 图通常用 top_pad_inches 收紧顶部留白。
     """
     setup_chinese_font()
 
@@ -6764,12 +6771,60 @@ def save_fund_estimate_table_image(
     extra_artists.extend(separator_artists)
     extra_artists.extend(watermark_artists)
 
+    side_pads = {
+        "top": top_pad_inches,
+        "bottom": bottom_pad_inches,
+        "left": left_pad_inches,
+        "right": right_pad_inches,
+    }
+    if any(value is not None for value in side_pads.values()):
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        crop_artists = [table]
+        if benchmark_table_artist is not None:
+            crop_artists.append(benchmark_table_artist)
+        if title_artist is not None:
+            crop_artists.append(title_artist)
+        if bottom_block_artist is not None:
+            crop_artists.append(bottom_block_artist)
+        crop_artists.extend(separator_artists)
+
+        crop_bboxes = []
+        for artist in crop_artists:
+            try:
+                bbox = artist.get_window_extent(renderer=renderer)
+            except Exception:
+                continue
+            if bbox is not None and bbox.width > 0 and bbox.height > 0:
+                crop_bboxes.append(bbox)
+
+        if crop_bboxes:
+            tight_bbox = Bbox.union(crop_bboxes).transformed(fig.dpi_scale_trans.inverted())
+        else:
+            tight_bbox = fig.get_tightbbox(renderer, bbox_extra_artists=extra_artists)
+        default_pad = float(pad_inches or 0.0)
+        top_pad = default_pad if top_pad_inches is None else float(top_pad_inches)
+        bottom_pad = default_pad if bottom_pad_inches is None else float(bottom_pad_inches)
+        left_pad = default_pad if left_pad_inches is None else float(left_pad_inches)
+        right_pad = default_pad if right_pad_inches is None else float(right_pad_inches)
+        bbox_inches = Bbox.from_extents(
+            tight_bbox.x0 - left_pad,
+            tight_bbox.y0 - bottom_pad,
+            tight_bbox.x1 + right_pad,
+            tight_bbox.y1 + top_pad,
+        )
+        savefig_kwargs = {"bbox_inches": bbox_inches, "pad_inches": 0}
+    else:
+        savefig_kwargs = {
+            "bbox_inches": "tight",
+            "bbox_extra_artists": extra_artists,
+            "pad_inches": pad_inches,
+        }
+
     fig.savefig(
         output_file,
         dpi=dpi,
-        bbox_inches="tight",
-        bbox_extra_artists=extra_artists,
-        pad_inches=pad_inches,
+        **savefig_kwargs,
     )
     plt.close(fig)
 

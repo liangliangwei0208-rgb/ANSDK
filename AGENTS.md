@@ -86,7 +86,7 @@
 - `tools/configs/fund_proxy_configs.py`：代理型基金配置和海外有效披露持仓增强系数。
 - `tools/configs/residual_benchmark_configs.py`：海外股票持仓型基金的补偿仓位基准配置。默认使用纳斯达克100；可按基金代码指定其他基准，例如 `007844` 使用 `XOP` 作为美国油气开采方向代理。
 - `tools/configs/market_benchmark_configs.py`：safe 海外基金图底部“基准表”的指数、ETF、海外资产和点位观察指标配置。想隐藏某个基准，把 `enabled` 改为 `False`；隐藏不会删除旧缓存，但 safe 图不会继续展示该项。当前默认启用纳斯达克100、标普500、XOP、费城半导体、现货黄金和每日图 VIX 点位。
-- `tools/configs/safe_image_style_configs.py`：safe 公开图的统一样式配置。标题字号/颜色/间距、表头底色、正文底色、涨跌颜色、表格行距、列宽、备注字号、水印文字、logo 透明度等都从这里维护，优先不要去绘图函数里硬改。
+- `tools/configs/safe_image_style_configs.py`：safe 公开图的统一样式配置。标题字号/颜色/间距、图片四周留白、表头底色、正文底色、涨跌颜色、表格行距、列宽、备注字号、水印文字、logo 透明度等都从这里维护，优先不要去绘图函数里硬改。
 - `tools/configs/security_mappings.py`：美股 / 韩国证券代码映射；韩国六位数字代码需要配合名称别名匹配，避免误判 A 股。
 - `tools/configs/rsi_configs.py`：市场 RSI 图标的配置。
 - `tools/configs/market_calendar_configs.py`：市场交易日历名称、收盘缓冲、韩国节假日置零策略。
@@ -160,9 +160,10 @@ Matplotlib 表格和 RSI 图默认使用 `180 DPI`，用于降低图片体积并
 
 ## safe 系列现状
 
-safe 公开图的视觉样式已集中到 `tools/configs/safe_image_style_configs.py`。后续如果要改标题和表格间距、文字大小、颜色、底色、水印文字、水印透明度、表格行距或列宽，优先改这个配置文件：
+safe 公开图的视觉样式已集中到 `tools/configs/safe_image_style_configs.py`。后续如果要改标题和表格间距、图片四周留白、文字大小、颜色、底色、水印文字、水印透明度、表格行距或列宽，优先改这个配置文件：
 
 - 标题：`SAFE_TITLE_STYLE` 控制字号、颜色、粗细、每日图标题 gap 和累计图标题 gap。`cumulative_gap` 越小，`safe_sum_holidays.png` / `safe_holidays.png` 的标题和主表越近。
+- 画布：`SAFE_CANVAS_STYLE` 控制每日图导出外边距；顶部留白调 `daily_top_pad_inches`，底部留白调 `daily_bottom_pad_inches`，左右留白调 `daily_left_pad_inches` / `daily_right_pad_inches`。
 - 表格：`SAFE_DAILY_TABLE_STYLE`、`SAFE_CUMULATIVE_TABLE_STYLE` 控制正文/表头字号、表头底色、表头文字色、正文底色、画布底色、网格色、行高、横纵向缩放。
 - 列宽：`SAFE_DAILY_COLUMN_WIDTHS`、`SAFE_CUMULATIVE_COLUMN_WIDTHS`、`SAFE_BENCHMARK_COLUMN_WIDTHS` 控制不同图的列宽。“列间距”主要通过这里调。
 - 涨跌颜色：`SAFE_RETURN_COLORS` 控制红涨、绿跌和无效/中性数据颜色。

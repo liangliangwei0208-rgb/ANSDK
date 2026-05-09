@@ -409,8 +409,7 @@ def save_haiwai_safe_table(
     image_kwargs.update(
         {
             "footnote_text": (
-                "依据基金季度报告前十大持仓股及指数估算，仅供学习记录，"
-                "不构成投资建议；最终以基金公司更新为准。"
+                "依据基金季度报告前十大持仓股及指数估算，最终以基金公司更新为准。鱼师AHNS出品"
             ),
             # safe 系列统一由 tools.safe_display.apply_safe_public_watermarks()
             # 叠加居中 logo 和斜向文字水印，这里关闭表格函数内置平铺水印。
