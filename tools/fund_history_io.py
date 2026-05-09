@@ -41,6 +41,8 @@ from tools.paths import CACHE_DIR
 
 FUND_ESTIMATE_RETURN_CACHE_FILE = "fund_estimate_return_cache.json"
 DATE_FIELD_RUN_DATE_BJ = "run_date_bj"
+A_SHARE_TRADE_CALENDAR_CACHE_FILE = "a_share_trade_calendar_cache.json"
+A_SHARE_TRADE_CALENDAR_CACHE_DAYS = 7
 
 
 @dataclass(frozen=True)
@@ -278,6 +280,86 @@ def _get_beijing_today(today=None) -> date:
         return datetime.now().date()
 
 
+def _a_share_trade_calendar_cache_path(cache_dir: str | Path | None = None) -> Path:
+    root = Path(cache_dir) if cache_dir is not None else CACHE_DIR
+    return root / A_SHARE_TRADE_CALENDAR_CACHE_FILE
+
+
+def _is_calendar_cache_fresh(fetched_at, max_age_days: int = A_SHARE_TRADE_CALENDAR_CACHE_DAYS) -> bool:
+    if not fetched_at:
+        return False
+    try:
+        fetched = pd.to_datetime(fetched_at, errors="coerce")
+        if pd.isna(fetched):
+            return False
+        if getattr(fetched, "tzinfo", None) is not None:
+            now = pd.Timestamp.now(tz=fetched.tzinfo)
+        else:
+            now = pd.Timestamp.now()
+        return (now - fetched).total_seconds() <= int(max_age_days) * 86400
+    except Exception:
+        return False
+
+
+def _load_a_share_trade_dates_from_file_cache(
+    cache_dir: str | Path | None = None,
+    *,
+    allow_expired: bool = False,
+) -> tuple[set[str], str]:
+    path = _a_share_trade_calendar_cache_path(cache_dir=cache_dir)
+    if not path.exists():
+        return set(), f"A股交易日历文件缓存不存在: {path}"
+
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as exc:
+        return set(), f"A股交易日历文件缓存读取失败: {exc}"
+
+    if not isinstance(data, dict):
+        return set(), "A股交易日历文件缓存格式异常"
+
+    fresh = _is_calendar_cache_fresh(data.get("fetched_at"))
+    if not fresh and not allow_expired:
+        return set(), "A股交易日历文件缓存已过期"
+
+    trade_dates = {
+        normalized
+        for normalized in map(_normalize_date_string, data.get("trade_dates", []) or [])
+        if normalized
+    }
+    if not trade_dates:
+        return set(), "A股交易日历文件缓存无有效日期"
+
+    source = str(data.get("source") or "A股交易日历文件缓存")
+    freshness = "fresh" if fresh else "expired-fallback"
+    return trade_dates, f"{source}({freshness}, {len(trade_dates)} dates)"
+
+
+def _save_a_share_trade_dates_to_file_cache(
+    trade_dates: set[str],
+    source: str,
+    cache_dir: str | Path | None = None,
+) -> None:
+    if not trade_dates:
+        return
+
+    path = _a_share_trade_calendar_cache_path(cache_dir=cache_dir)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            "fetched_at": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(timespec="seconds"),
+            "source": source,
+            "trade_dates": sorted(trade_dates),
+        }
+        tmp_path = path.with_suffix(path.suffix + ".tmp")
+        with tmp_path.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        tmp_path.replace(path)
+    except Exception as exc:
+        print(f"[WARN] A股交易日历文件缓存写入失败: {path}, 原因: {exc}", flush=True)
+
+
 def _load_a_share_trade_dates_from_akshare() -> tuple[set[str], str]:
     """
     读取 AkShare 的 A 股交易日历。
@@ -348,10 +430,31 @@ def _load_a_share_trade_dates(
 ) -> tuple[set[str], str]:
     akshare_reason = ""
     if use_akshare:
-        trade_dates, source = _load_a_share_trade_dates_from_akshare()
+        trade_dates, source = _load_a_share_trade_dates_from_file_cache(
+            cache_dir=cache_dir,
+            allow_expired=False,
+        )
         if trade_dates:
             return trade_dates, source
+
+        trade_dates, source = _load_a_share_trade_dates_from_akshare()
+        if trade_dates:
+            _save_a_share_trade_dates_to_file_cache(
+                trade_dates,
+                source=source,
+                cache_dir=cache_dir,
+            )
+            return trade_dates, source
         akshare_reason = source
+
+        trade_dates, source = _load_a_share_trade_dates_from_file_cache(
+            cache_dir=cache_dir,
+            allow_expired=True,
+        )
+        if trade_dates:
+            if akshare_reason:
+                source = f"{source}; {akshare_reason}"
+            return trade_dates, source
 
     trade_dates, source = _load_a_share_trade_dates_from_local_cache(cache_dir=cache_dir)
     if trade_dates:

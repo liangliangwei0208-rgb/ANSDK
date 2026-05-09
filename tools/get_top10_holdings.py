@@ -106,6 +106,7 @@ SECURITY_RETURN_CACHE_FILE = "security_return_cache.json"
 FUND_ESTIMATE_RETURN_CACHE_FILE = "fund_estimate_return_cache.json"
 
 _SECURITY_RETURN_RUNTIME_CACHE = {}
+_MARKET_SCHEDULE_RUNTIME_CACHE = {}
 
 SECURITY_HOURLY_CACHE_RETENTION_DAYS = 15
 SECURITY_DAILY_CACHE_RETENTION_DAYS = 30
@@ -633,8 +634,19 @@ def _market_calendar(market: str):
 
 
 def _market_schedule(market: str, start_date, end_date) -> pd.DataFrame:
-    cal = _market_calendar(market)
-    return cal.schedule(start_date=str(start_date), end_date=str(end_date))
+    market_norm = str(market or "").strip().upper()
+    start_key = _normalize_trade_date_key(start_date) or str(start_date)
+    end_key = _normalize_trade_date_key(end_date) or str(end_date)
+    cache_key = (market_norm, start_key, end_key)
+
+    cached = _MARKET_SCHEDULE_RUNTIME_CACHE.get(cache_key)
+    if cached is not None:
+        return cached.copy()
+
+    cal = _market_calendar(market_norm)
+    schedule = cal.schedule(start_date=str(start_key), end_date=str(end_key))
+    _MARKET_SCHEDULE_RUNTIME_CACHE[cache_key] = schedule.copy()
+    return schedule
 
 
 def _market_is_open_on(market: str, day) -> bool:
@@ -1930,6 +1942,169 @@ def infer_sina_cn_symbol(code):
     raise RuntimeError(f"无法识别沪深交易所前缀: {code}")
 
 
+DAILY_DATE_COLUMN_CANDIDATES = ["日期", "date", "Date"]
+DAILY_CLOSE_COLUMN_CANDIDATES = ["收盘", "close", "Close", "收盘价"]
+DAILY_PCT_COLUMN_CANDIDATES = ["涨跌幅", "涨幅", "pct_chg", "change_percent", "ChangePercent"]
+
+
+def _prepare_daily_price_frame(raw_df, source_name: str, end_date_key: str):
+    if raw_df is None or raw_df.empty:
+        raise RuntimeError(f"{source_name} returned empty data")
+
+    out = raw_df.copy()
+    date_col = _pick_column(out, DAILY_DATE_COLUMN_CANDIDATES)
+    close_col = _pick_column(out, DAILY_CLOSE_COLUMN_CANDIDATES)
+    pct_col = _pick_column(out, DAILY_PCT_COLUMN_CANDIDATES)
+
+    if date_col is not None:
+        out[date_col] = pd.to_datetime(out[date_col], errors="coerce")
+        out = out.dropna(subset=[date_col]).sort_values(date_col)
+        out = _drop_rows_after_target_date(out, out[date_col], end_date_key)
+
+    if out.empty:
+        raise RuntimeError(f"{source_name} has no rows on or before target={end_date_key}")
+
+    return out, date_col, close_col, pct_col
+
+
+def _daily_pct_result_from_prepared(prepared, source_name: str):
+    out, date_col, _close_col, pct_col = prepared
+    if pct_col is None:
+        raise RuntimeError(f"{source_name} has no pct column")
+
+    pct_values = pd.to_numeric(out[pct_col], errors="coerce")
+    valid_idx = pct_values[pct_values.notna()].index
+    if len(valid_idx) <= 0:
+        raise RuntimeError(f"{source_name} pct column has no valid value")
+
+    last_idx = valid_idx[-1]
+    trade_date = _extract_trade_date_from_row(out.loc[last_idx], date_col)
+    return float(pct_values.loc[last_idx]), trade_date, f"{source_name}_pct"
+
+
+def _daily_close_result_from_prepared(prepared, source_name: str, *, market: str, symbol: str):
+    out, date_col, close_col, _pct_col = prepared
+    if close_col is None:
+        raise RuntimeError(f"{source_name} has no close column")
+
+    out = out.copy()
+    out[close_col] = pd.to_numeric(out[close_col], errors="coerce")
+    out = out.dropna(subset=[close_col])
+    if len(out) < 2:
+        raise RuntimeError(f"{source_name} valid close count < 2")
+
+    last_close = float(out.iloc[-1][close_col])
+    prev_close = float(out.iloc[-2][close_col])
+    if prev_close == 0:
+        raise RuntimeError(f"{source_name} previous close is 0")
+
+    trade_date = _extract_trade_date_from_row(out.iloc[-1], date_col)
+    return_pct = (last_close / prev_close - 1.0) * 100.0
+    source = f"{source_name}_close_calc"
+    _raise_if_suspicious_unadjusted_return(
+        return_pct,
+        market=market,
+        symbol=symbol,
+        trade_date=trade_date,
+        source=source,
+    )
+    return return_pct, trade_date, source
+
+
+def _best_daily_result_from_ordered_sources(
+    *,
+    pct_fetchers,
+    adjusted_fetchers,
+    raw_fetchers,
+    end_date_key: str,
+    market: str,
+    symbol: str,
+    errors: list[str],
+):
+    prepared_cache = {}
+    best_stale_result = None
+
+    def get_prepared(source_name, fetcher):
+        if source_name in prepared_cache:
+            return prepared_cache[source_name]
+        try:
+            df = fetcher()
+            prepared = _prepare_daily_price_frame(df, source_name, end_date_key)
+            prepared_cache[source_name] = prepared
+            return prepared
+        except Exception as exc:
+            errors.append(f"{source_name}: {repr(exc)}")
+            return None
+
+    def consider(result, source_name):
+        nonlocal best_stale_result
+        trade_date_key = _normalize_trade_date_key(result[1])
+        if not end_date_key or trade_date_key == end_date_key:
+            return result
+
+        errors.append(f"{source_name} trade_date={trade_date_key} != target={end_date_key}")
+        if trade_date_key and (
+            best_stale_result is None
+            or trade_date_key > _normalize_trade_date_key(best_stale_result[1])
+        ):
+            best_stale_result = result
+        return None
+
+    for source_name, fetcher in pct_fetchers:
+        prepared = get_prepared(source_name, fetcher)
+        if prepared is None:
+            continue
+        try:
+            exact = consider(
+                _daily_pct_result_from_prepared(prepared, source_name),
+                source_name,
+            )
+            if exact is not None:
+                return exact
+        except Exception as exc:
+            errors.append(f"{source_name}_pct_parse: {repr(exc)}")
+
+    for source_name, fetcher in adjusted_fetchers:
+        prepared = get_prepared(source_name, fetcher)
+        if prepared is None:
+            continue
+        try:
+            exact = consider(
+                _daily_close_result_from_prepared(
+                    prepared,
+                    source_name,
+                    market=market,
+                    symbol=symbol,
+                ),
+                source_name,
+            )
+            if exact is not None:
+                return exact
+        except Exception as exc:
+            errors.append(f"{source_name}_adjusted_parse: {repr(exc)}")
+
+    for source_name, fetcher in raw_fetchers:
+        prepared = get_prepared(source_name, fetcher)
+        if prepared is None:
+            continue
+        try:
+            exact = consider(
+                _daily_close_result_from_prepared(
+                    prepared,
+                    source_name,
+                    market=market,
+                    symbol=symbol,
+                ),
+                source_name,
+            )
+            if exact is not None:
+                return exact
+        except Exception as exc:
+            errors.append(f"{source_name}_raw_parse: {repr(exc)}")
+
+    return best_stale_result
+
+
 def fetch_cn_security_return_pct(code, retry=2, sleep_seconds=0.8):
     """
     获取 A股 / A股ETF / 场内基金实时涨跌幅，返回百分数。
@@ -2017,6 +2192,44 @@ def fetch_cn_security_return_pct_daily_with_date(code, lookback_days=90, end_dat
     errors = []
     frames = []
     sina_symbol = infer_sina_cn_symbol(code)
+
+    if code.startswith(("5", "1")):
+        pct_fetchers = [
+            ("ak_fund_etf_hist_em", lambda: ak.fund_etf_hist_em(symbol=code, period="daily", start_date=start_date, end_date=end_date_api, adjust="")),
+            ("ak_fund_etf_hist_sina", lambda: ak.fund_etf_hist_sina(symbol=sina_symbol)),
+        ]
+        adjusted_fetchers = [
+            ("ak_stock_zh_a_daily_sina_qfq", lambda: ak.stock_zh_a_daily(symbol=sina_symbol, start_date=start_date, end_date=end_date_api, adjust="qfq")),
+        ]
+        raw_fetchers = [
+            ("ak_stock_zh_a_daily_sina_raw", lambda: ak.stock_zh_a_daily(symbol=sina_symbol, start_date=start_date, end_date=end_date_api, adjust="")),
+            ("ak_stock_zh_a_hist", lambda: ak.stock_zh_a_hist(symbol=code, period="daily", start_date=start_date, end_date=end_date_api, adjust="")),
+        ]
+    else:
+        pct_fetchers = [
+            ("ak_stock_zh_a_hist", lambda: ak.stock_zh_a_hist(symbol=code, period="daily", start_date=start_date, end_date=end_date_api, adjust="")),
+        ]
+        adjusted_fetchers = [
+            ("ak_stock_zh_a_daily_sina_qfq", lambda: ak.stock_zh_a_daily(symbol=sina_symbol, start_date=start_date, end_date=end_date_api, adjust="qfq")),
+            ("ak_stock_zh_a_daily_sina_hfq", lambda: ak.stock_zh_a_daily(symbol=sina_symbol, start_date=start_date, end_date=end_date_api, adjust="hfq")),
+        ]
+        raw_fetchers = [
+            ("ak_stock_zh_a_daily_sina_raw", lambda: ak.stock_zh_a_daily(symbol=sina_symbol, start_date=start_date, end_date=end_date_api, adjust="")),
+            ("ak_fund_etf_hist_sina", lambda: ak.fund_etf_hist_sina(symbol=sina_symbol)),
+            ("ak_fund_etf_hist_em", lambda: ak.fund_etf_hist_em(symbol=code, period="daily", start_date=start_date, end_date=end_date_api, adjust="")),
+        ]
+
+    fast_result = _best_daily_result_from_ordered_sources(
+        pct_fetchers=pct_fetchers,
+        adjusted_fetchers=adjusted_fetchers,
+        raw_fetchers=raw_fetchers,
+        end_date_key=end_date_key,
+        market="CN",
+        symbol=code,
+        errors=errors,
+    )
+    if fast_result is not None:
+        return fast_result
 
     sina_fetchers = []
     if code.startswith(("5", "1")):
@@ -2144,6 +2357,36 @@ def fetch_hk_return_pct_akshare_daily_with_date(code, lookback_days=90, end_date
     )
     errors = []
     frames = []
+
+    def _fetch_hk_hist_em():
+        try:
+            return ak.stock_hk_hist(symbol=hk_code, period="daily", start_date=start_date, end_date=end_date_api, adjust="")
+        except TypeError:
+            return ak.stock_hk_hist(symbol=hk_code, period="daily", adjust="")
+
+    pct_fetchers = [
+        ("ak_stock_hk_hist_em", _fetch_hk_hist_em),
+        ("ak_stock_hk_daily_sina_raw", lambda: ak.stock_hk_daily(symbol=hk_code, adjust="")),
+    ]
+    adjusted_fetchers = [
+        ("ak_stock_hk_daily_sina_qfq", lambda: ak.stock_hk_daily(symbol=hk_code, adjust="qfq")),
+        ("ak_stock_hk_daily_sina_hfq", lambda: ak.stock_hk_daily(symbol=hk_code, adjust="hfq")),
+    ]
+    raw_fetchers = [
+        ("ak_stock_hk_daily_sina_raw", lambda: ak.stock_hk_daily(symbol=hk_code, adjust="")),
+        ("ak_stock_hk_hist_em", _fetch_hk_hist_em),
+    ]
+    fast_result = _best_daily_result_from_ordered_sources(
+        pct_fetchers=pct_fetchers,
+        adjusted_fetchers=adjusted_fetchers,
+        raw_fetchers=raw_fetchers,
+        end_date_key=end_date_key,
+        market="HK",
+        symbol=hk_code,
+        errors=errors,
+    )
+    if fast_result is not None:
+        return fast_result
 
     for adjust, suffix in (("", "raw"), ("qfq", "qfq"), ("hfq", "hfq")):
         try:
@@ -2855,7 +3098,9 @@ def fetch_us_return_pct_daily_with_date(ticker, end_date=None):
     if best_stale_result is not None:
         return best_stale_result
 
-    raise RuntimeError(f"美股 {ticker} 日线获取失败: {' | '.join(errors)}")
+    message = f"美股 {ticker} 日线获取失败: {' | '.join(errors)}"
+    print(f"[WARN] {message}", flush=True)
+    raise RuntimeError(message)
 
 
 def fetch_us_return_pct_akshare_daily(ticker):

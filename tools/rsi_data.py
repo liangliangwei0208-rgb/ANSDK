@@ -16,6 +16,7 @@ rsi_module.py
 """
 
 from pathlib import Path
+from datetime import datetime
 from typing import Optional
 
 import re
@@ -265,6 +266,54 @@ def _read_cache(cache_file: Path, days: int) -> pd.DataFrame:
     df = df.dropna(subset=["date", "close"])
     df = df.sort_values("date").reset_index(drop=True)
     return df.tail(days).copy()
+
+
+def _cache_file_modified_today(cache_file: Path) -> bool:
+    try:
+        mtime = datetime.fromtimestamp(cache_file.stat().st_mtime).date()
+        return mtime == datetime.now().date()
+    except Exception:
+        return False
+
+
+def _read_usable_index_cache(
+    cache_file: Path,
+    *,
+    symbol: str,
+    days: int,
+    include_realtime: bool,
+) -> pd.DataFrame | None:
+    if not cache_file.exists():
+        return None
+
+    try:
+        cached = _read_cache(cache_file, days=days)
+    except Exception as exc:
+        print(f"[WARN] RSI 本地缓存读取失败: {cache_file}, 原因: {exc}")
+        return None
+
+    if cached is None or cached.empty:
+        return None
+
+    latest_date = pd.to_datetime(cached["date"], errors="coerce").max()
+    today = pd.Timestamp.today().normalize()
+
+    if include_realtime and _is_cn_etf_symbol(symbol):
+        if pd.notna(latest_date) and latest_date.normalize() >= today - pd.Timedelta(days=10):
+            cached = _merge_cn_etf_realtime_today(cached, symbol=symbol)
+            print(f"[CACHE] RSI 使用本地历史缓存并补充实时点: {symbol} -> {cache_file}")
+            return cached.tail(days).copy()
+        return None
+
+    if _cache_file_modified_today(cache_file):
+        print(f"[CACHE] RSI 使用今日已检查的本地缓存: {symbol} -> {cache_file}")
+        return cached.tail(days).copy()
+
+    if pd.notna(latest_date) and latest_date.normalize() >= today:
+        print(f"[CACHE] RSI 使用已包含今日数据的本地缓存: {symbol} -> {cache_file}")
+        return cached.tail(days).copy()
+
+    return None
 
 def compute_rsi_wilder(close: pd.Series, window: int = 9) -> pd.Series:
     """
@@ -952,6 +1001,16 @@ def get_index_akshare(
         .replace(":", "_")
     )
     cache_file = cache_path / f"{safe_symbol}_index_daily.csv"
+
+    if use_cache:
+        cached = _read_usable_index_cache(
+            cache_file,
+            symbol=symbol,
+            days=days,
+            include_realtime=include_realtime,
+        )
+        if cached is not None:
+            return cached
 
     errors = []
 
