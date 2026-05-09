@@ -239,6 +239,9 @@ def load_benchmark_estimate_history(cache_file: str | Path | None = None) -> pd.
     if "return_pct" in df.columns:
         df["return_pct"] = pd.to_numeric(df["return_pct"], errors="coerce")
 
+    if "value" in df.columns:
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
     if "is_final" in df.columns:
         df["is_final"] = df["is_final"].astype(bool)
     else:
@@ -779,6 +782,8 @@ def _enabled_benchmark_config_rows() -> list[dict]:
     for order, item in enumerate(MARKET_BENCHMARK_ITEMS, start=1):
         if not isinstance(item, dict) or not bool(item.get("enabled", True)):
             continue
+        if not bool(item.get("include_in_cumulative", True)):
+            continue
         label = str(item.get("label", "")).strip()
         ticker = str(item.get("ticker", "")).strip().upper()
         if not label or not ticker:
@@ -791,7 +796,13 @@ def _disabled_benchmark_config_sets() -> tuple[set[str], set[str]]:
     symbols = set()
     labels = set()
     for item in MARKET_BENCHMARK_ITEMS:
-        if not isinstance(item, dict) or bool(item.get("enabled", True)):
+        if not isinstance(item, dict):
+            continue
+        disabled_for_cumulative = (
+            not bool(item.get("enabled", True))
+            or not bool(item.get("include_in_cumulative", True))
+        )
+        if not disabled_for_cumulative:
             continue
         symbol = str(item.get("ticker", "")).strip().upper()
         label = str(item.get("label", "")).strip()
@@ -843,6 +854,11 @@ def build_benchmark_cumulative_dataframe(benchmark_daily_df: pd.DataFrame) -> pd
                 "记录状态": "无有效数据",
             })
         return pd.DataFrame(rows, columns=out.columns)
+
+    benchmark_daily_df = benchmark_daily_df.copy()
+    if "value_type" in benchmark_daily_df.columns:
+        value_type = benchmark_daily_df["value_type"].fillna("").astype(str).str.strip().str.lower()
+        benchmark_daily_df = benchmark_daily_df[value_type.isin(["", "return_pct", "pct"])].copy()
 
     rows = []
     for symbol, g in benchmark_daily_df.groupby("symbol"):
@@ -976,19 +992,27 @@ def _iter_benchmark_footer_items(benchmark_summary_df: pd.DataFrame | None):
     return items
 
 
-def _cumulative_benchmark_columns(include_symbol: bool = False) -> list[str]:
+def _cumulative_benchmark_columns(
+    include_symbol: bool = False,
+    hide_effective_days_column: bool = False,
+) -> list[str]:
+    middle_columns = [] if hide_effective_days_column else ["有效估值日数"]
     if include_symbol:
-        return ["序号", "指数代码", "指数名称", "区间模型观察", "有效估值日数", "起始估值日", "结束估值日"]
-    return ["序号", "指数名称", "区间模型观察", "有效估值日数", "起始估值日", "结束估值日"]
+        return ["序号", "指数代码", "指数名称", "区间模型观察", *middle_columns, "起始估值日", "结束估值日"]
+    return ["序号", "指数名称", "区间模型观察", *middle_columns, "起始估值日", "结束估值日"]
 
 
 def _build_cumulative_benchmark_table_rows(
     benchmark_summary_df: pd.DataFrame | None,
     pct_digits: int = 2,
     include_symbol: bool = False,
+    hide_effective_days_column: bool = False,
 ):
     benchmark_items = _iter_benchmark_footer_items(benchmark_summary_df)
-    columns = _cumulative_benchmark_columns(include_symbol=include_symbol)
+    columns = _cumulative_benchmark_columns(
+        include_symbol=include_symbol,
+        hide_effective_days_column=hide_effective_days_column,
+    )
     rows = []
     raw_values = []
     for index, item in enumerate(benchmark_items, start=1):
@@ -1152,6 +1176,7 @@ def save_cumulative_estimate_table_image(
     title_gap: float = 0.018,
     pad_inches: float = 0.14,
     hide_status_column: bool = True,
+    hide_effective_days_column: bool = False,
     benchmark_summary_df: pd.DataFrame | None = None,
     show_benchmark_footer: bool = True,
     benchmark_footer_fontsize: int = 15,
@@ -1165,6 +1190,9 @@ def save_cumulative_estimate_table_image(
     hide_status_column:
         True：保存图片时隐藏“记录状态”列；summary_df 本身不受影响。
         False：保存图片时保留“记录状态”列。
+    hide_effective_days_column:
+        True：保存图片时隐藏“有效估值日数”列，适合 safe_holidays 这种日期区间很短、
+        需要给基金名称和日期列让出空间的公开图。
     benchmark_summary_df:
         build_benchmark_cumulative_dataframe() 返回的指数累计结果。
     show_benchmark_footer:
@@ -1191,6 +1219,8 @@ def save_cumulative_estimate_table_image(
     # 内部 summary_df 仍保留该列，用于判断 final / intraday，不破坏后续逻辑。
     if hide_status_column:
         table_df = table_df.drop(columns=["记录状态"], errors="ignore")
+    if hide_effective_days_column:
+        table_df = table_df.drop(columns=["有效估值日数"], errors="ignore")
 
     if table_df.empty:
         empty_row = {
@@ -1220,9 +1250,18 @@ def save_cumulative_estimate_table_image(
             benchmark_summary_df,
             pct_digits=pct_digits,
             include_symbol=include_benchmark_symbol,
+            hide_effective_days_column=hide_effective_days_column,
         )
         if show_benchmark_footer
-        else (pd.DataFrame(columns=_cumulative_benchmark_columns(include_symbol=include_benchmark_symbol)), [])
+        else (
+            pd.DataFrame(
+                columns=_cumulative_benchmark_columns(
+                    include_symbol=include_benchmark_symbol,
+                    hide_effective_days_column=hide_effective_days_column,
+                )
+            ),
+            [],
+        )
     )
     has_benchmark_footer = not benchmark_table_df.empty
 

@@ -112,8 +112,12 @@ AHNS 是一个个人公开数据建模复盘项目，用于生成每日市场 RS
   - `us_security`：美股股票或 ETF，例如 `XOP`。
   - `foreign_futures`：新浪外盘期货 / 东方财富国际期货，例如 `XAU`、`GC00Y`。
   - `yahoo`：Yahoo Chart，例如 `^VIX`。
+  - `vix_level`：VIX 恐慌指数点位，优先 CBOE 官方 CSV，失败后回退 FRED。
 - `ticker`：主行情代码。
 - `fallback_ticker`：备用行情代码；主源失败后才会尝试。
+- `display_in_daily_fund`：是否显示在每日海外基金 safe 图底部。
+- `display_in_holidays`：是否显示在节假日 / 节后观察图。
+- `include_in_cumulative`：是否作为收益率参与区间复利累计；VIX 这类点位指标必须为 `False`。
 
 当前默认配置：
 
@@ -124,11 +128,11 @@ AHNS 是一个个人公开数据建模复盘项目，用于生成每日市场 RS
 | 油气开采指数 | `us_security` | `XOP` | AKShare 美股 ETF 日线；XOP 是 ETF 代理，不是指数本体 |
 | 费城半导体 | `us_index` | `.SOX` | 新浪美股指数 |
 | 现货黄金 | `foreign_futures` | `XAU`，fallback `GC00Y` | 优先新浪外盘期货 XAU；失败后用东方财富国际期货 GC00Y |
-| VIX恐慌指数 | `yahoo` | `^VIX` | 仍保留 Yahoo 口径，但当前默认 `enabled=False` |
+| VIX恐慌指数 | `vix_level` | `VIX` | CBOE 官方历史 CSV 优先，FRED 兜底；每日图显示点位，不带 `%` |
 
-注意：配置不会把所有失败基准自动兜到 Yahoo。只有 `kind="yahoo"` 的项目，或者代码里明确写了 Yahoo fallback 的证券路径，才会访问 Yahoo。国内环境下如果不想依赖 VPN，建议继续保持 VIX 关闭。
+注意：配置不会把所有失败基准自动兜到 Yahoo。只有 `kind="yahoo"` 的项目，或者代码里明确写了 Yahoo fallback 的证券路径，才会访问 Yahoo。VIX 当前不走 Yahoo，而是 CBOE/FRED CSV；它展示的是最新完整有效交易日收盘点位，不是涨跌幅。
 
-基准记录会写入 `cache/fund_estimate_return_cache.json` 的 `benchmark_records`。如果某个基准失败，只影响该基准行，不会中断主流程，也不会影响基金主表生成。
+基准记录会写入 `cache/fund_estimate_return_cache.json` 的 `benchmark_records`。收益率型基准写 `return_pct`；VIX 点位型指标写 `value_type="level"`、`value/display_value`，并保持 `return_pct=null`。如果某个基准失败，只影响该基准行，不会中断主流程，也不会影响基金主表生成。
 
 ## Safe 图样式配置
 
@@ -254,7 +258,7 @@ Matplotlib 表格和 RSI 图默认使用 180 DPI，科普图使用 Pillow 固定
 - `security_return_cache.json` 对锚点行情使用 `SECURITY:{market}:{ticker}:{valuation_anchor_date}` key，缓存 `traded/closed/pending/missing/stale` 状态。
 - 旧 A 股裸收盘价来源 `ak_stock_zh_a_daily_sina_close_calc`、旧港股裸收盘价来源 `ak_stock_hk_daily_sina_close_calc` 不再视为新鲜缓存，命中后会自动刷新到更可靠口径。旧缓存文件不会被删除。
 - `fund_estimate_return_cache.json` 只写海外/全球基金记录，key 为 `overseas:{fund_code}:{valuation_anchor_date}`。
-- 基准表记录写在 `fund_estimate_return_cache.json` 的 `benchmark_records`；显示端会按 `market_benchmark_configs.py` 的 `enabled=True` 过滤，所以禁用 VIX 后旧缓存不会继续显示。
+- 基准表记录写在 `fund_estimate_return_cache.json` 的 `benchmark_records`；显示端会按 `market_benchmark_configs.py` 的 `enabled=True`、`display_in_holidays`、`include_in_cumulative` 过滤。VIX 只在每日海外基金图展示点位，不进入节假日累计图和区间复利。
 - 指数行情和基金估算历史保留 300 天。
 - Actions 运行后会自动回推缓存变化。
 
@@ -279,7 +283,7 @@ Matplotlib 表格和 RSI 图默认使用 180 DPI，科普图使用 Pillow 固定
 
 - 刚收盘或海外市场尚未完整收盘时，美股可能是 `pending`，贡献暂时为 0，后续重新运行会刷新。
 - 如果 `fund_estimate_breakdown.py` 已显示某个持仓修复为正确涨跌幅，但基金合计仍是旧值，需要先运行 `main.py` 或 `git_main.py --no-send` 重新写入基金缓存。
-- 如果 VIX 已设为 `enabled=False` 但图片仍有 VIX，通常是在看旧图片；重新运行 `safe_fund.py` 或 `git_main.py --no-send` 即可。
+- VIX 在每日图中显示的是点位，不是涨跌幅；如果节假日累计图里出现 VIX，先确认 `include_in_cumulative=False`、`display_in_holidays=False`，并重新运行对应出图脚本。
 
 ## 验证命令
 

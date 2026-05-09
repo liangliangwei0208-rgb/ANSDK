@@ -20,8 +20,13 @@
     - "us_security"：美股股票或 ETF，适合 XOP 这类 ETF。
     - "foreign_futures"：新浪外盘期货 / 东方财富国际期货，适合伦敦金、COMEX 黄金等。
     - "yahoo"：Yahoo Chart 代码，适合 VIX 等特殊海外资产。
+    - "vix_level"：VIX 恐慌指数点位。它不是涨跌幅，不参与累计收益计算。
 - ticker：实际请求行情用的代码。
 - fallback_ticker：可选。主 ticker 失败时使用的备用代码。
+- display_in_daily_fund：可选。是否在每日 safe 海外基金图底部基准表展示，默认 True。
+- display_in_holidays：可选。是否在节假日 / 节后观察图展示，默认 True。
+- include_in_cumulative：可选。是否作为收益率参与区间累计复利，默认 True。
+  VIX 这类点位指标必须设为 False；否则会被误当成涨跌幅。
 - final_confirm_hour_bj / final_confirm_minute_bj：可选。只建议给 "foreign_futures"
   这类接近 24 小时交易的海外期货/贵金属使用。
   例如估值日是 2026-05-08，配置 5:30 表示北京时间 2026-05-09 05:30
@@ -33,7 +38,10 @@
   作为 COMEX 黄金代理，避免国内运行强依赖 Yahoo。
 - 伦敦金/现货黄金的日线确认时间默认设为估值日次日北京时间 05:30。原因是
   黄金接近全天交易，晚上 23 点左右接口可能已经返回当天日期，但 close 仍会继续变化。
-- VIX 仍保留 Yahoo Chart，因为当前本地新浪 / 东方财富路径没有稳定的 VIX 完整日线。
+- VIX 恐慌指数使用 CBOE 官方历史 CSV，失败后回退 FRED。它展示的是“最新完整有效
+  交易日收盘点位”，例如 18.42，不带百分号，不表示涨跌幅。
+- VIX 只用于每日海外基金图观察市场波动水平，不作为基金补偿基准，也不进入
+  safe_holidays.py / sum_holidays.py 的累计基准表。
 - 基准表里的涨跌幅全部按“完整日线收盘价”计算，不使用盘中实时行情。
 """
 
@@ -51,7 +59,15 @@ MARKET_BENCHMARK_ITEMS = [
         "final_confirm_hour_bj": 5,
         "final_confirm_minute_bj": 30,
     },
-    {"enabled": False, "label": "VIX恐慌指数", "kind": "yahoo", "ticker": "^VIX"},
+    {
+        "enabled": True,
+        "label": "VIX恐慌指数",
+        "kind": "vix_level",
+        "ticker": "VIX",
+        "display_in_daily_fund": True,
+        "display_in_holidays": False,
+        "include_in_cumulative": False,
+    },
 ]
 
 

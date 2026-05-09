@@ -264,6 +264,8 @@ def get_benchmark_footer_items(
             if label:
                 disabled_labels.add(label)
             continue
+        if not bool(spec.get("display_in_daily_fund", True)):
+            continue
         if not label or not symbol:
             continue
         enabled_specs.append({
@@ -271,6 +273,9 @@ def get_benchmark_footer_items(
             "label": label,
             "symbol": symbol,
             "kind": str(spec.get("kind", "")).strip(),
+            "display_in_daily_fund": bool(spec.get("display_in_daily_fund", True)),
+            "display_in_holidays": bool(spec.get("display_in_holidays", True)),
+            "include_in_cumulative": bool(spec.get("include_in_cumulative", True)),
         })
 
     records = cache.get("benchmark_records", {})
@@ -315,10 +320,18 @@ def get_benchmark_footer_items(
                 "symbol": str(item.get("symbol", "")).strip() or symbol,
                 "kind": str(item.get("kind", "")).strip() or spec["kind"],
                 "return_pct": safe_float_or_none(item.get("return_pct")),
+                "value": safe_float_or_none(item.get("value")),
+                "display_value": str(item.get("display_value", "")).strip(),
+                "value_type": str(
+                    item.get("value_type", "level" if spec["kind"] == "vix_level" else "return_pct")
+                ).strip() or "return_pct",
                 "trade_date": normalize_date_string(item.get("trade_date")) or valuation_date,
                 "source": str(item.get("source", "")).strip(),
                 "status": str(item.get("status", "missing")).strip() or "missing",
                 "error": str(item.get("error", "")).strip(),
+                "display_in_daily_fund": bool(item.get("display_in_daily_fund", spec["display_in_daily_fund"])),
+                "display_in_holidays": bool(item.get("display_in_holidays", spec["display_in_holidays"])),
+                "include_in_cumulative": bool(item.get("include_in_cumulative", spec["include_in_cumulative"])),
             }
         )
 
@@ -342,10 +355,16 @@ def get_benchmark_footer_items(
                 "symbol": symbol,
                 "kind": str(item.get("kind", "")).strip(),
                 "return_pct": safe_float_or_none(item.get("return_pct")),
+                "value": safe_float_or_none(item.get("value")),
+                "display_value": str(item.get("display_value", "")).strip(),
+                "value_type": str(item.get("value_type", "return_pct")).strip() or "return_pct",
                 "trade_date": normalize_date_string(item.get("trade_date")) or valuation_date,
                 "source": str(item.get("source", "")).strip(),
                 "status": str(item.get("status", "")).strip(),
                 "error": str(item.get("error", "")).strip(),
+                "display_in_daily_fund": bool(item.get("display_in_daily_fund", True)),
+                "display_in_holidays": bool(item.get("display_in_holidays", True)),
+                "include_in_cumulative": bool(item.get("include_in_cumulative", True)),
             }
         )
 

@@ -8,7 +8,6 @@ safe_holidays.py
 - 序号
 - 基金名称
 - 区间模型估算观察
-- 有效估值日数
 - 起始估值日
 - 结束估值日
 
@@ -43,15 +42,24 @@ SAFE_COLUMNS = [
     "序号",
     "基金名称",
     CUMULATIVE_DISPLAY_COLUMN,
-    "有效估值日数",
     "起始估值日",
     "结束估值日",
 ]
 # 是否用星号隐藏 safe_holidays 图片里的基金名称后半段；默认不隐藏。
 MASK_FUND_NAMES_WITH_STAR = True
+SAFE_FUND_NAME_MAX_CHARS = 20
 
 
 ensure_runtime_dirs()
+
+
+def compact_safe_fund_name(name: str, max_chars: int = SAFE_FUND_NAME_MAX_CHARS) -> str:
+    """safe_holidays 行数较多，超长基金名会挤压日期列；这里做展示层截断。"""
+    text = str(name or "").strip()
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip("*") + "***"
+
 
 def build_safe_summary_df(
     summary_df: pd.DataFrame,
@@ -74,7 +82,6 @@ def build_safe_summary_df(
         "序号",
         "基金名称",
         CUMULATIVE_INTERNAL_COLUMN,
-        "有效估值日数",
         "起始估值日",
         "结束估值日",
     ]
@@ -87,10 +94,17 @@ def build_safe_summary_df(
     safe_df = safe_df.rename(columns={CUMULATIVE_INTERNAL_COLUMN: CUMULATIVE_DISPLAY_COLUMN})
     safe_df["序号"] = range(1, len(safe_df) + 1)
     safe_df["基金名称"] = safe_df["基金名称"].map(
-        lambda name: mask_fund_name(name, enabled=mask_names)
+        lambda name: compact_safe_fund_name(mask_fund_name(name, enabled=mask_names))
     )
 
     return safe_df
+
+
+def build_safe_benchmark_summary_df(benchmark_summary_df: pd.DataFrame) -> pd.DataFrame:
+    """生成 safe_holidays 图片使用的基准累计表，去掉容易挤压日期列的有效日数。"""
+    if benchmark_summary_df is None or benchmark_summary_df.empty:
+        return pd.DataFrame()
+    return benchmark_summary_df.drop(columns=["有效估值日数"], errors="ignore")
 
 
 def main() -> None:
@@ -123,6 +137,7 @@ def main() -> None:
         require_final=False,
     )
     benchmark_summary_df = build_benchmark_cumulative_dataframe(benchmark_daily_df)
+    safe_benchmark_summary_df = build_safe_benchmark_summary_df(benchmark_summary_df)
     # 底层累计绘图函数依赖原始列名；图片展示时再映射为“区间模型估算观察”。
     image_summary_df = safe_summary_df.rename(
         columns={CUMULATIVE_DISPLAY_COLUMN: CUMULATIVE_INTERNAL_COLUMN}
@@ -132,7 +147,7 @@ def main() -> None:
         summary_df=image_summary_df,
         title=title,
         pct_digits=2,
-        benchmark_summary_df=benchmark_summary_df,
+        benchmark_summary_df=safe_benchmark_summary_df,
         display_column_names={CUMULATIVE_INTERNAL_COLUMN: CUMULATIVE_DISPLAY_COLUMN},
     )
 
@@ -157,8 +172,9 @@ def main() -> None:
         title=title,
         pct_digits=2,
         display_column_names={CUMULATIVE_INTERNAL_COLUMN: CUMULATIVE_DISPLAY_COLUMN},
-        benchmark_summary_df=benchmark_summary_df,
+        benchmark_summary_df=safe_benchmark_summary_df,
         hide_status_column=True,
+        hide_effective_days_column=True,
         **image_kwargs,
     )
     apply_safe_public_watermarks(output_file)

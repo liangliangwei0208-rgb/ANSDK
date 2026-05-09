@@ -85,7 +85,7 @@
 - `tools/configs/fund_universe_configs.py`：海外/全球基金池和历史国内基金池。新增、删除基金代码优先改这里；基金代码请写 6 位字符串，避免前导 0 丢失。
 - `tools/configs/fund_proxy_configs.py`：代理型基金配置和海外有效披露持仓增强系数。
 - `tools/configs/residual_benchmark_configs.py`：海外股票持仓型基金的补偿仓位基准配置。默认使用纳斯达克100；可按基金代码指定其他基准，例如 `007844` 使用 `XOP` 作为美国油气开采方向代理。
-- `tools/configs/market_benchmark_configs.py`：safe 海外基金图底部“基准表”的指数、ETF 和海外资产配置。想隐藏某个基准，把 `enabled` 改为 `False`；隐藏不会删除旧缓存，但 safe 图不会继续展示该项。当前默认启用纳斯达克100、标普500、XOP、费城半导体和现货黄金，VIX 默认关闭。
+- `tools/configs/market_benchmark_configs.py`：safe 海外基金图底部“基准表”的指数、ETF、海外资产和点位观察指标配置。想隐藏某个基准，把 `enabled` 改为 `False`；隐藏不会删除旧缓存，但 safe 图不会继续展示该项。当前默认启用纳斯达克100、标普500、XOP、费城半导体、现货黄金和每日图 VIX 点位。
 - `tools/configs/safe_image_style_configs.py`：safe 公开图的统一样式配置。标题字号/颜色/间距、表头底色、正文底色、涨跌颜色、表格行距、列宽、备注字号、水印文字、logo 透明度等都从这里维护，优先不要去绘图函数里硬改。
 - `tools/configs/security_mappings.py`：美股 / 韩国证券代码映射；韩国六位数字代码需要配合名称别名匹配，避免误判 A 股。
 - `tools/configs/rsi_configs.py`：市场 RSI 图标的配置。
@@ -100,9 +100,12 @@
 
 - `enabled`：是否展示/主动拉取。`False` 表示隐藏该基准，即使 `cache/fund_estimate_return_cache.json` 里还有旧记录，`safe_fund.py`、`safe_holidays.py`、`sum_holidays.py` 也会过滤掉它；但旧缓存不会被删除。
 - `label`：图片中展示的名称。
-- `kind`：行情类型，目前支持 `us_index`、`us_security`、`foreign_futures`、`yahoo`。
+- `kind`：行情类型，目前支持 `us_index`、`us_security`、`foreign_futures`、`yahoo`、`vix_level`。
 - `ticker`：主行情代码。
 - `fallback_ticker`：备用行情代码，可选；主源失败时才尝试。
+- `display_in_daily_fund`：可选，是否显示在每日海外基金 safe 图底部，默认 `True`。
+- `display_in_holidays`：可选，是否显示在节假日 / 节后观察图，默认 `True`。
+- `include_in_cumulative`：可选，是否作为收益率参与区间累计复利，默认 `True`；VIX 这类点位指标必须设为 `False`。
 
 当前默认基准源偏国内友好：
 
@@ -111,9 +114,9 @@
 - `油气开采指数`：`kind="us_security", ticker="XOP"`，优先走 AKShare 美股日线；XOP 是 ETF，不是指数本体，当前作为美国油气开采方向代理。
 - `费城半导体`：`kind="us_index", ticker=".SOX"`，走新浪美股指数。
 - `现货黄金`：`kind="foreign_futures", ticker="XAU", fallback_ticker="GC00Y"`，优先新浪外盘期货 XAU，失败后用东方财富国际期货 GC00Y 作为 COMEX 黄金代理。
-- `VIX恐慌指数`：`kind="yahoo", ticker="^VIX"`，当前 `enabled=False`。如果后续要重新展示，改为 `True` 即可；但国内运行通常需要能访问 Yahoo。
+- `VIX恐慌指数`：`kind="vix_level", ticker="VIX"`，`enabled=True`，只在每日海外基金图显示最新完整交易日收盘点位；优先 CBOE 官方历史 CSV，失败后回退 FRED。它不是涨跌幅，`include_in_cumulative=False`，不会进入节假日累计图。
 
-基准读取失败时只影响该基准行，不中断主流程。每个基准的结果会按 `ticker + valuation_anchor_date` 写入锚点缓存；同一估值日再次生成图片会优先读取缓存。配置里不会自动“全部一路兜到 Yahoo”，只有 `kind="yahoo"` 的项目或代码中明确写了 Yahoo fallback 的项目才会访问 Yahoo。
+基准读取失败时只影响该基准行，不中断主流程。每个基准的结果会按 `ticker + valuation_anchor_date` 写入锚点缓存；同一估值日再次生成图片会优先读取缓存。配置里不会自动“全部一路兜到 Yahoo”，只有 `kind="yahoo"` 的项目或代码中明确写了 Yahoo fallback 的项目才会访问 Yahoo。VIX 当前不走 Yahoo。
 
 ## 输出图片
 
@@ -178,12 +181,12 @@ safe 公开图的视觉样式已集中到 `tools/configs/safe_image_style_config
 - `safe_holidays.py`：
   - 自动判断 A 股是否休市：优先 AkShare A 股交易日历，失败时用本地国内行情缓存兜底。
   - 只读取 `main.py` 已写入的海外基金和 benchmark 缓存。
-  - 只展示 `market_benchmark_configs.py` 中 `enabled=True` 的基准，旧缓存里的禁用基准不会出现在表格里。
+  - 只展示 `market_benchmark_configs.py` 中 `enabled=True` 且 `include_in_cumulative=True` 的收益率基准，旧缓存里的禁用基准和 VIX 点位不会出现在累计表格里。
   - 满足条件才出图；否则只打印原因，不生成新图。
 - `sum_holidays.py`：
   - 只读取缓存，不拉行情、不重新计算持仓、不写缓存。
   - 只生成 `output/safe_sum_holidays.png`，不再生成或覆盖详细版 `output/sum_holidays.png`。
-  - 节后单日图和累计图都会过滤 `enabled=False` 的基准。
+  - 节后单日图和累计图都会过滤 `enabled=False` 或 `display_in_holidays=False` 的基准；VIX 点位不展示。
   - 普通周六周日不属于节假日累计收益场景。
   - 节后第 1 个 A 股交易日：读取节前最后一个 A 股交易日对应的海外基金估值日，生成单日观察图。
   - 节后第 2 个 A 股交易日：累计节前最后估值日之后到缓存中最新海外估值日的实际存在记录。
@@ -226,7 +229,7 @@ safe 公开图的视觉样式已集中到 `tools/configs/safe_image_style_config
 - `fund_estimate_return_cache.json`：
   - 只缓存海外/全球基金，不再缓存国内基金。
   - 基金 key 为 `overseas:{fund_code}:{valuation_anchor_date}`，同时保留兼容字段 `valuation_date`。
-  - 基准表结果写入 `benchmark_records`，由 `tools/configs/market_benchmark_configs.py` 的 `enabled=True` 项主动更新；显示端会过滤禁用基准的旧记录。
+  - 基准表结果写入 `benchmark_records`，由 `tools/configs/market_benchmark_configs.py` 的 `enabled=True` 项主动更新；显示端会过滤禁用基准和不适用场景的旧记录。收益率基准使用 `return_pct`，VIX 点位使用 `value_type="level"`、`value/display_value`，并保持 `return_pct=null`。
   - 覆盖规则由数据质量驱动，不再使用 15:30 冻结逻辑。
   - `records` 和 `benchmark_records` 保留最近 300 天。
   - 按 `valuation_anchor_date` / 兼容字段 `valuation_date` 裁剪；缺失时回退 `run_date_bj`。
@@ -289,9 +292,9 @@ $files = @('.\git_main.py','.\check_project.py','.\main.py','.\fund_estimate_bre
 
 ## 常见排障
 
-- VIX 已在 `tools/configs/market_benchmark_configs.py` 里设为 `enabled=False`，但表格仍显示：先确认运行的是最新代码；当前 `safe_fund.py`、`safe_holidays.py`、`sum_holidays.py` 都会过滤禁用基准。如果仍出现，通常是输出图片未重新生成或正在查看旧图片。
+- VIX 每日图显示的是恐慌指数点位，不是涨跌幅；正常情况下 `safe_holidays.py`、`sum_holidays.py` 不展示 VIX。如果累计图里出现 VIX，先确认配置中 `display_in_holidays=False`、`include_in_cumulative=False`，再重新运行对应出图脚本。
 - 基准源失败：不会中断主流程，只会让对应基准行显示无有效数据或不参与累计。配置不会自动把所有基准都兜到 Yahoo；只有 `kind="yahoo"` 或明确写了 Yahoo fallback 的路径才会访问 Yahoo。
-- 国内运行访问 Yahoo 慢或失败：默认只有 VIX 仍保留 Yahoo 口径且已关闭。纳斯达克100、标普500、费城半导体优先新浪美股指数，XOP 优先 AKShare 美股日线，黄金优先新浪外盘期货/东方财富国际期货。
+- 国内运行访问 Yahoo 慢或失败：当前默认基准里不再主动依赖 Yahoo。纳斯达克100、标普500、费城半导体优先新浪美股指数，XOP 优先 AKShare 美股日线，黄金优先新浪外盘期货/东方财富国际期货，VIX 优先 CBOE 官方 CSV 并用 FRED 兜底。
 - A 股或港股单日涨跌异常大：优先怀疑除权、拆股、送转、复权口径或旧缓存。先运行 `fund_estimate_breakdown.py` 查看该持仓的数据源字段；正常情况下应优先看到 `pct`、`qfq`、`hfq`、`adjclose` 等来源，而不是旧裸 close 计算来源。
 - `fund_estimate_breakdown.py` 只读缓存：如果刚修复了个股口径但基金合计仍是旧数，需要先运行 `main.py` 或 `git_main.py --no-send` 重算基金缓存，再用拆解工具查看。
 - safe 图文字大小、颜色、表头色、底色、水印不满意：优先改 `tools/configs/safe_image_style_configs.py`，再单独运行 `safe_fund.py`、`safe_holidays.py` 或 `sum_holidays.py --today <日期>` 预览。
@@ -317,6 +320,6 @@ $files = @('.\git_main.py','.\check_project.py','.\main.py','.\fund_estimate_bre
 - 新增 `check_project.py` 运行前自检工具，只检查不修改。
 - `sum_holidays.py` 后续只生成 `output/safe_sum_holidays.png`，不再生成详细版 `output/sum_holidays.png`。
 - `kepu/kepu_xiane.py` 每天生成科普图，只有北京时间周日生成限额表格图。
-- 新增 `tools/configs/market_benchmark_configs.py`，海外基金基准表改为配置化并偏国内友好：纳斯达克100/标普500/费城半导体走新浪美股指数，XOP 走美股 ETF 日线，黄金走新浪外盘期货并用东方财富国际期货兜底，VIX 默认关闭。
+- 新增 `tools/configs/market_benchmark_configs.py`，海外基金基准表改为配置化并偏国内友好：纳斯达克100/标普500/费城半导体走新浪美股指数，XOP 走美股 ETF 日线，黄金走新浪外盘期货并用东方财富国际期货兜底，VIX 走 CBOE/FRED 点位口径且只展示在每日图。
 - 新增 `tools/configs/safe_image_style_configs.py`，safe 公开图的标题、表格、颜色、列宽、备注和水印统一配置化；标题和表格间距已收紧，表头底色调为较浅的 `#3f4d66`。
 - A 股、港股、美股日收益口径已加固为涨跌幅列/复权价/调整后收盘价优先，裸收盘价最后兜底；旧 A 股和港股裸 close 缓存会自动刷新，美股异常大裸 close 涨跌会触发重试。

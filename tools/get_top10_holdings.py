@@ -3694,6 +3694,145 @@ def _return_from_anchor_result(anchor_result: dict) -> tuple[float | None, str, 
     return 0.0, source, trade_date, status
 
 
+VIX_CSV_SOURCES = [
+    (
+        "CBOE",
+        "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    ),
+    (
+        "FRED",
+        "https://fred.stlouisfed.org/graph/fredgraph.csv?id=VIXCLS",
+    ),
+]
+
+
+def _read_csv_from_url(url: str, timeout: int = 30) -> pd.DataFrame:
+    headers = {"User-Agent": "Mozilla/5.0"}
+    resp = requests.get(url, headers=headers, timeout=timeout)
+    resp.raise_for_status()
+    return pd.read_csv(StringIO(resp.text))
+
+
+def _extract_latest_vix_close(df: pd.DataFrame, source: str) -> dict:
+    """
+    兼容 CBOE / FRED 两种 CSV：
+    - CBOE: DATE, OPEN, HIGH, LOW, CLOSE
+    - FRED: observation_date, VIXCLS
+    """
+    original_cols = list(df.columns)
+    col_map = {str(c).upper().strip(): c for c in original_cols}
+
+    if "DATE" in col_map:
+        date_col = col_map["DATE"]
+    elif "OBSERVATION_DATE" in col_map:
+        date_col = col_map["OBSERVATION_DATE"]
+    else:
+        raise ValueError(f"{source} 无法识别日期列，实际列名：{original_cols}")
+
+    if "CLOSE" in col_map:
+        close_col = col_map["CLOSE"]
+    elif "VIXCLS" in col_map:
+        close_col = col_map["VIXCLS"]
+    else:
+        raise ValueError(f"{source} 无法识别收盘列，实际列名：{original_cols}")
+
+    out = df[[date_col, close_col]].copy()
+    out.columns = ["date", "close"]
+    out["date"] = pd.to_datetime(out["date"], errors="coerce")
+    out["close"] = pd.to_numeric(out["close"], errors="coerce")
+    out = out.dropna(subset=["date", "close"]).sort_values("date")
+
+    if out.empty:
+        raise ValueError(f"{source} 没有有效 VIX 收盘数据")
+
+    last = out.iloc[-1]
+    return {
+        "date": last["date"].date().isoformat(),
+        "close": float(last["close"]),
+        "source": source,
+    }
+
+
+def fetch_latest_complete_vix_close() -> dict:
+    """
+    获取 VIX 恐慌指数“最新完整交易日”的收盘点位。
+
+    优先 CBOE 官方历史 CSV；CBOE 不可用时回退 FRED。这里返回的是点位，
+    不是涨跌幅，调用方必须把 return_pct 保持为空。
+    """
+    errors = []
+    for source_name, url in VIX_CSV_SOURCES:
+        try:
+            df = _read_csv_from_url(url)
+            return _extract_latest_vix_close(df, source_name)
+        except Exception as exc:
+            errors.append(f"{source_name}: {repr(exc)}")
+
+    raise RuntimeError("所有 VIX 数据源均失败：" + " | ".join(errors))
+
+
+def _get_vix_level_by_anchor_date(symbol, valuation_anchor_date, cache_enabled=True) -> dict:
+    """
+    获取 VIX 最新完整交易日点位，并按估值锚点写入锚点缓存。
+
+    VIX 是波动率点位，不是收益率。即使最新 VIX 日期早于基金估值锚点，也
+    保留点位供每日图观察，同时把 status 标为 stale，方便后续自动刷新。
+    """
+    cache_key, ticker_norm, anchor = _anchor_security_cache_key("VIX_LEVEL", symbol, valuation_anchor_date)
+
+    if cache_enabled and anchor:
+        cached = _SECURITY_RETURN_RUNTIME_CACHE.get(cache_key)
+        if isinstance(cached, dict) and _is_anchor_cache_entry_fresh(cached):
+            return dict(cached)
+
+        cache = _load_json_cache(SECURITY_RETURN_CACHE_FILE, default={})
+        item = cache.get(cache_key) if isinstance(cache, dict) else None
+        if isinstance(item, dict) and _is_anchor_cache_entry_fresh(item):
+            _SECURITY_RETURN_RUNTIME_CACHE[cache_key] = dict(item)
+            return dict(item)
+
+    try:
+        latest = fetch_latest_complete_vix_close()
+        trade_date = _normalize_trade_date_key(latest.get("date"))
+        status = _configured_benchmark_status_from_trade_date(trade_date, anchor)
+        close_value = float(latest["close"])
+        entry = _anchor_return_result(
+            market="VIX_LEVEL",
+            ticker=ticker_norm,
+            valuation_anchor_date=anchor,
+            status=status,
+            return_pct=None,
+            trade_date=trade_date,
+            source=str(latest.get("source", "")),
+            calendar_is_open=None,
+            error="" if status == "traded" else f"VIX trade_date={trade_date} 与 valuation_anchor_date={anchor} 不一致",
+        )
+        entry.update(
+            {
+                "value": close_value,
+                "display_value": f"{close_value:.2f}",
+                "value_type": "level",
+            }
+        )
+    except Exception as exc:
+        entry = _anchor_return_result(
+            market="VIX_LEVEL",
+            ticker=ticker_norm,
+            valuation_anchor_date=anchor,
+            status="missing",
+            return_pct=None,
+            trade_date="",
+            source="vix_level_failed",
+            calendar_is_open=None,
+            error=str(exc),
+        )
+        entry.update({"value": None, "display_value": "", "value_type": "level"})
+
+    if cache_enabled and anchor:
+        _save_anchor_security_cache_entry(cache_key, entry)
+    return entry
+
+
 def _normalize_residual_benchmark_key(value) -> str:
     return str(value or "").strip().lower()
 
@@ -5710,6 +5849,9 @@ def _enabled_market_benchmark_specs():
             "symbol": ticker.upper(),
             "kind": kind,
             "fallback_ticker": str(item.get("fallback_ticker", "")).strip().upper(),
+            "display_in_daily_fund": bool(item.get("display_in_daily_fund", True)),
+            "display_in_holidays": bool(item.get("display_in_holidays", True)),
+            "include_in_cumulative": bool(item.get("include_in_cumulative", True)),
             "final_confirm_hour_bj": item.get("final_confirm_hour_bj"),
             "final_confirm_minute_bj": item.get("final_confirm_minute_bj"),
         })
@@ -5967,6 +6109,33 @@ def _fetch_configured_market_benchmark(spec: dict, cache_enabled=True, valuation
                 fallback_ticker=fallback_ticker,
             )
             status = _configured_benchmark_status_from_trade_date(trade_date, anchor)
+    elif kind == "vix_level":
+        anchor_result = _get_vix_level_by_anchor_date(
+            symbol,
+            valuation_anchor_date=anchor,
+            cache_enabled=cache_enabled,
+        )
+        value = _safe_float_or_none(anchor_result.get("value"))
+        return {
+            "order": order,
+            "label": label,
+            "symbol": symbol,
+            "kind": kind,
+            "fallback_ticker": fallback_ticker,
+            "return_pct": None,
+            "value": value,
+            "display_value": str(anchor_result.get("display_value", "")).strip()
+            or (f"{value:.2f}" if value is not None else ""),
+            "value_type": "level",
+            "trade_date": _normalize_trade_date_key(anchor_result.get("trade_date")),
+            "source": str(anchor_result.get("source", "")),
+            "status": str(anchor_result.get("status", "missing")).strip().lower() or "missing",
+            "valuation_anchor_date": anchor,
+            "error": str(anchor_result.get("error", "")),
+            "display_in_daily_fund": bool(spec.get("display_in_daily_fund", True)),
+            "display_in_holidays": bool(spec.get("display_in_holidays", True)),
+            "include_in_cumulative": bool(spec.get("include_in_cumulative", False)),
+        }
     else:
         raise RuntimeError(f"未知基准 kind={kind!r}，请检查 market_benchmark_configs.py")
 
@@ -5983,6 +6152,10 @@ def _fetch_configured_market_benchmark(spec: dict, cache_enabled=True, valuation
         "status": status,
         "valuation_anchor_date": anchor,
         "error": None,
+        "value_type": "return_pct",
+        "display_in_daily_fund": bool(spec.get("display_in_daily_fund", True)),
+        "display_in_holidays": bool(spec.get("display_in_holidays", True)),
+        "include_in_cumulative": bool(spec.get("include_in_cumulative", True)),
     }
 
 
@@ -6016,11 +6189,17 @@ def get_us_index_benchmark_items(cache_enabled=True, valuation_anchor_date=None)
                 "symbol": symbol,
                 "kind": str(spec.get("kind", "")).strip().lower(),
                 "return_pct": None,
+                "value": None,
+                "display_value": "",
+                "value_type": "level" if str(spec.get("kind", "")).strip().lower() == "vix_level" else "return_pct",
                 "trade_date": "",
                 "source": "failed",
                 "status": "missing",
                 "valuation_anchor_date": anchor,
                 "error": str(e),
+                "display_in_daily_fund": bool(spec.get("display_in_daily_fund", True)),
+                "display_in_holidays": bool(spec.get("display_in_holidays", True)),
+                "include_in_cumulative": bool(spec.get("include_in_cumulative", True)),
             })
 
     return items
@@ -6052,20 +6231,36 @@ def _build_daily_benchmark_table_rows(benchmark_footer_items, pct_digits=2):
         if not isinstance(item, dict):
             continue
 
+        value_type = str(item.get("value_type", "return_pct") or "return_pct").strip().lower()
         value = _safe_float_or_none(item.get("return_pct"))
-        raw_values.append(value)
         status = str(item.get("status", "")).strip().lower()
         trade_date = _normalize_date_string(item.get("trade_date")) or _normalize_date_string(
             item.get("valuation_anchor_date")
         )
-        if value is not None:
-            display_value = format_pct(value, digits=pct_digits)
-        elif status == "pending":
-            display_value = "未确认"
-        elif status == "stale":
-            display_value = "数据滞后"
+        if value_type == "level":
+            level_value = _safe_float_or_none(item.get("value"))
+            raw_values.append({"value_type": "level", "value": level_value})
+            configured_display = str(item.get("display_value", "") or "").strip()
+            if configured_display:
+                display_value = configured_display
+            elif level_value is not None:
+                display_value = f"{level_value:.2f}"
+            elif status == "pending":
+                display_value = "未确认"
+            elif status == "stale":
+                display_value = "数据滞后"
+            else:
+                display_value = "获取失败"
         else:
-            display_value = "获取失败"
+            raw_values.append(value)
+            if value is not None:
+                display_value = format_pct(value, digits=pct_digits)
+            elif status == "pending":
+                display_value = "未确认"
+            elif status == "stale":
+                display_value = "数据滞后"
+            else:
+                display_value = "获取失败"
         rows.append(
             {
                 "序号": index,
@@ -6139,7 +6334,11 @@ def _draw_benchmark_table(
             cell.set_facecolor(body_bg)
             if value_col_idx is not None and col == value_col_idx:
                 raw_val = raw_values[row - 1] if row - 1 < len(raw_values) else None
-                if raw_val is None or pd.isna(raw_val):
+                if isinstance(raw_val, dict) and raw_val.get("value_type") == "level":
+                    cell.get_text().set_color(neutral_color)
+                    if raw_val.get("value") is not None:
+                        cell.get_text().set_weight("bold")
+                elif raw_val is None or pd.isna(raw_val):
                     cell.get_text().set_color(neutral_color)
                 elif float(raw_val) > 0:
                     cell.get_text().set_color(up_color)
@@ -7353,6 +7552,11 @@ def _write_overseas_benchmark_history_cache(
         label = str(item.get("label", "")).strip()
         symbol = str(item.get("symbol", "")).strip().upper()
         return_pct = _safe_float_or_none(item.get("return_pct"))
+        value = _safe_float_or_none(item.get("value"))
+        value_type = str(item.get("value_type", "return_pct") or "return_pct").strip().lower()
+        display_value = str(item.get("display_value", "") or "").strip()
+        if value_type == "level" and not display_value and value is not None:
+            display_value = f"{value:.2f}"
         trade_date = _normalize_date_string(item.get("trade_date")) or valuation_date
 
         if not symbol:
@@ -7361,10 +7565,15 @@ def _write_overseas_benchmark_history_cache(
 
         key = f"benchmark:{symbol}:{valuation_date}"
         status = str(item.get("status", "traded")).strip().lower()
-        is_final = return_pct is not None and status in ANCHOR_COMPLETE_STATUSES and trade_date == valuation_date
+        has_level_value = value_type == "level" and value is not None
+        is_final = (
+            (return_pct is not None or has_level_value)
+            and status in ANCHOR_COMPLETE_STATUSES
+            and (trade_date == valuation_date or value_type == "level")
+        )
         if status == "pending":
             data_status = "pending"
-        elif return_pct is None:
+        elif return_pct is None and not has_level_value:
             data_status = "failed"
         elif status == "stale":
             data_status = "stale"
@@ -7389,11 +7598,17 @@ def _write_overseas_benchmark_history_cache(
             "data_status": data_status,
             "is_final": bool(is_final),
             "return_pct": float(return_pct) if return_pct is not None else None,
+            "value": float(value) if value is not None else None,
+            "display_value": display_value,
+            "value_type": value_type,
             "status": status,
             "source": str(item.get("source", "")),
             "error": str(item.get("error", "") or ""),
             "table_title": str(title or ""),
             "output_file": str(output_file or ""),
+            "display_in_daily_fund": bool(item.get("display_in_daily_fund", True)),
+            "display_in_holidays": bool(item.get("display_in_holidays", True)),
+            "include_in_cumulative": bool(item.get("include_in_cumulative", value_type != "level")),
             "cache_key": key,
         }
 

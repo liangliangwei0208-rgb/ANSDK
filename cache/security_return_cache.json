@@ -561,7 +561,7 @@
     "source": "calendar_failed",
     "calendar_is_open": null,
     "error": "未配置交易日历: market=UNKNOWN",
-    "fetched_at": "2026-05-09T08:13:35"
+    "fetched_at": "2026-05-09T11:07:32+08:00"
   },
   "SECURITY:US:WDC:2026-05-08": {
     "market": "US",
@@ -633,7 +633,7 @@
     "source": "calendar_failed",
     "calendar_is_open": null,
     "error": "未配置交易日历: market=UNKNOWN",
-    "fetched_at": "2026-05-09T08:13:41"
+    "fetched_at": "2026-05-09T11:07:32+08:00"
   },
   "SECURITY:US:ONTO:2026-05-08": {
     "market": "US",
@@ -669,7 +669,7 @@
     "source": "calendar_failed",
     "calendar_is_open": null,
     "error": "未配置交易日历: market=UNKNOWN",
-    "fetched_at": "2026-05-09T08:13:44"
+    "fetched_at": "2026-05-09T11:07:32+08:00"
   },
   "SECURITY:HK:00981:2026-05-08": {
     "market": "HK",
@@ -1017,7 +1017,7 @@
     "source": "calendar_failed",
     "calendar_is_open": null,
     "error": "未配置交易日历: market=UNKNOWN",
-    "fetched_at": "2026-05-09T08:14:12"
+    "fetched_at": "2026-05-09T11:07:33+08:00"
   },
   "SECURITY:US:JBL:2026-05-08": {
     "market": "US",
@@ -1209,7 +1209,7 @@
     "source": "yahoo_chart_adjclose_daily_us_fallback_trade_date_older_than_anchor",
     "calendar_is_open": true,
     "error": "trade_date=2026-05-07 与 valuation_anchor_date=2026-05-08 不一致",
-    "fetched_at": "2026-05-09T08:14:38"
+    "fetched_at": "2026-05-09T11:07:42+08:00"
   },
   "SECURITY:US:PSX:2026-05-08": {
     "market": "US",
@@ -1626,5 +1626,20 @@
     "trade_date": "2026-05-08",
     "last_refresh_attempt_at": "2026-05-09T09:22:18",
     "postclose_checked_date": "2026-05-09"
+  },
+  "SECURITY:VIX_LEVEL:VIX:2026-05-08": {
+    "market": "VIX_LEVEL",
+    "ticker": "VIX",
+    "valuation_anchor_date": "2026-05-08",
+    "trade_date": "2026-05-08",
+    "return_pct": null,
+    "status": "traded",
+    "source": "CBOE",
+    "calendar_is_open": null,
+    "error": "",
+    "fetched_at": "2026-05-09T11:07:25+08:00",
+    "value": 17.19,
+    "display_value": "17.19",
+    "value_type": "level"
   }
 }

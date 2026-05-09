@@ -362,22 +362,42 @@ def _daily_benchmark_footer_items(benchmark_daily_df: pd.DataFrame) -> list[dict
     sort_order = {
         str(item.get("ticker", "")).strip().upper(): order
         for order, item in enumerate(MARKET_BENCHMARK_ITEMS, start=1)
-        if isinstance(item, dict) and bool(item.get("enabled", True))
+        if (
+            isinstance(item, dict)
+            and bool(item.get("enabled", True))
+            and bool(item.get("display_in_holidays", True))
+        )
     }
     disabled_symbols = {
         str(item.get("ticker", "")).strip().upper()
         for item in MARKET_BENCHMARK_ITEMS
-        if isinstance(item, dict) and not bool(item.get("enabled", True))
+        if (
+            isinstance(item, dict)
+            and (
+                not bool(item.get("enabled", True))
+                or not bool(item.get("display_in_holidays", True))
+            )
+        )
     }
     disabled_labels = {
         str(item.get("label", "")).strip()
         for item in MARKET_BENCHMARK_ITEMS
-        if isinstance(item, dict) and not bool(item.get("enabled", True))
+        if (
+            isinstance(item, dict)
+            and (
+                not bool(item.get("enabled", True))
+                or not bool(item.get("display_in_holidays", True))
+            )
+        )
     }
     config_labels = {
         str(item.get("label", "")).strip()
         for item in MARKET_BENCHMARK_ITEMS
-        if isinstance(item, dict) and bool(item.get("enabled", True))
+        if (
+            isinstance(item, dict)
+            and bool(item.get("enabled", True))
+            and bool(item.get("display_in_holidays", True))
+        )
     }
     out = benchmark_daily_df.copy()
     out["_sort"] = out["symbol"].astype(str).str.upper().map(sort_order).fillna(99)
