@@ -25,7 +25,7 @@ jobs:
       MPLBACKEND: Agg
       QQ_EMAIL_ACCOUNT: ${{ secrets.QQ_EMAIL_ACCOUNT }}
       QQ_EMAIL_AUTH_CODE: ${{ secrets.QQ_EMAIL_AUTH_CODE }}
-      QQ_EMAIL_RECEIVER: ${{ secrets.QQ_EMAIL_RECEIVER }}
+      #QQ_EMAIL_RECEIVER: ${{ secrets.QQ_EMAIL_RECEIVER }}
 
     steps:
       - name: Checkout repository
