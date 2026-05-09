@@ -41,7 +41,7 @@ def mask_fund_name(name: Any, *, enabled: bool | None = None) -> str:
     if not enabled:
         return text
 
-    visible_ratio = 0.65 if len(text) <= 8 else 0.55
+    visible_ratio = 0.70 if len(text) <= 9 else 0.55
     keep_len = max(1, math.ceil(len(text) * visible_ratio))
     return text[:keep_len] + "***"
 

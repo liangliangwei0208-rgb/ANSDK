@@ -1641,5 +1641,41 @@
     "value": 17.19,
     "display_value": "17.19",
     "value_type": "level"
+  },
+  "SECURITY:HK:00100:2026-05-08": {
+    "market": "HK",
+    "ticker": "00100",
+    "valuation_anchor_date": "2026-05-08",
+    "trade_date": "2026-05-08",
+    "return_pct": -9.506398537477146,
+    "status": "traded",
+    "source": "ak_stock_hk_daily_sina_qfq_close_calc",
+    "calendar_is_open": true,
+    "error": "",
+    "fetched_at": "2026-05-09T12:23:47+08:00"
+  },
+  "SECURITY:HK:06869:2026-05-08": {
+    "market": "HK",
+    "ticker": "06869",
+    "valuation_anchor_date": "2026-05-08",
+    "trade_date": "2026-05-08",
+    "return_pct": 5.670103092783507,
+    "status": "traded",
+    "source": "ak_stock_hk_daily_sina_qfq_close_calc",
+    "calendar_is_open": true,
+    "error": "",
+    "fetched_at": "2026-05-09T12:23:49+08:00"
+  },
+  "SECURITY:CN:688519:2026-05-08": {
+    "market": "CN",
+    "ticker": "688519",
+    "valuation_anchor_date": "2026-05-08",
+    "trade_date": "2026-05-08",
+    "return_pct": -3.6789473684210594,
+    "status": "traded",
+    "source": "ak_stock_zh_a_daily_sina_qfq_close_calc",
+    "calendar_is_open": true,
+    "error": "",
+    "fetched_at": "2026-05-09T12:23:51+08:00"
   }
 }
