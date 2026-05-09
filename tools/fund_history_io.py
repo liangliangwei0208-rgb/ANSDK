@@ -35,14 +35,15 @@ import matplotlib.pyplot as plt
 from matplotlib import font_manager
 from matplotlib.offsetbox import AnchoredOffsetbox, HPacker, TextArea, VPacker
 
+from tools.configs.cache_policy_configs import A_SHARE_TRADE_CALENDAR_CACHE_DAYS
 from tools.configs.market_benchmark_configs import MARKET_BENCHMARK_ITEMS
 from tools.paths import CACHE_DIR
+from tools.runtime_stats import record_market_event, timed_market_call
 
 
 FUND_ESTIMATE_RETURN_CACHE_FILE = "fund_estimate_return_cache.json"
 DATE_FIELD_RUN_DATE_BJ = "run_date_bj"
 A_SHARE_TRADE_CALENDAR_CACHE_FILE = "a_share_trade_calendar_cache.json"
-A_SHARE_TRADE_CALENDAR_CACHE_DAYS = 7
 
 
 @dataclass(frozen=True)
@@ -435,9 +436,21 @@ def _load_a_share_trade_dates(
             allow_expired=False,
         )
         if trade_dates:
+            record_market_event(
+                action="calendar_cache",
+                source="a_share_trade_calendar_file",
+                market="CN",
+                outcome="cache_hit",
+                cache_hit=True,
+            )
             return trade_dates, source
 
-        trade_dates, source = _load_a_share_trade_dates_from_akshare()
+        trade_dates, source = timed_market_call(
+            _load_a_share_trade_dates_from_akshare,
+            action="calendar_network_fetch",
+            source="akshare_trade_calendar",
+            market="CN",
+        )
         if trade_dates:
             _save_a_share_trade_dates_to_file_cache(
                 trade_dates,
@@ -452,12 +465,26 @@ def _load_a_share_trade_dates(
             allow_expired=True,
         )
         if trade_dates:
+            record_market_event(
+                action="calendar_cache",
+                source="a_share_trade_calendar_expired_file",
+                market="CN",
+                outcome="cache_hit",
+                cache_hit=True,
+            )
             if akshare_reason:
                 source = f"{source}; {akshare_reason}"
             return trade_dates, source
 
     trade_dates, source = _load_a_share_trade_dates_from_local_cache(cache_dir=cache_dir)
     if trade_dates:
+        record_market_event(
+            action="calendar_cache",
+            source="local_index_csv_calendar",
+            market="CN",
+            outcome="cache_hit",
+            cache_hit=True,
+        )
         if akshare_reason:
             source = f"{source}; {akshare_reason}"
         return trade_dates, source

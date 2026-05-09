@@ -90,6 +90,17 @@ from tools.configs.market_calendar_configs import (
     MARKET_CLOSE_BUFFER_HOURS,
 )
 from tools.configs.market_benchmark_configs import MARKET_BENCHMARK_ITEMS
+from tools.configs.cache_policy_configs import (
+    ANCHOR_CACHE_STABLE_RETENTION_DAYS,
+    ANCHOR_PENDING_CACHE_HOURS,
+    ANCHOR_TRANSIENT_CACHE_HOURS,
+    FUND_ESTIMATE_HISTORY_RETENTION_DAYS,
+    FUND_HOLDINGS_CACHE_DAYS,
+    FUND_PURCHASE_LIMIT_CACHE_DAYS,
+    SECURITY_DAILY_CACHE_RETENTION_DAYS,
+    SECURITY_HOURLY_CACHE_RETENTION_DAYS,
+    SECURITY_INDEX_CACHE_RETENTION_DAYS,
+)
 from tools.configs.residual_benchmark_configs import (
     DEFAULT_RESIDUAL_BENCHMARK_KEY,
     FUND_RESIDUAL_BENCHMARK_MAP,
@@ -97,6 +108,13 @@ from tools.configs.residual_benchmark_configs import (
 )
 from tools.configs.security_mappings import KR_TICKER_MAP, US_TICKER_MAP
 from tools.paths import CACHE_DIR
+from tools.runtime_stats import (
+    format_market_stats_lines,
+    record_market_event,
+    snapshot_market_events,
+    summarize_market_events,
+    timed_market_call,
+)
 
 # Runtime JSON cache utilities.
 
@@ -107,15 +125,6 @@ FUND_ESTIMATE_RETURN_CACHE_FILE = "fund_estimate_return_cache.json"
 
 _SECURITY_RETURN_RUNTIME_CACHE = {}
 _MARKET_SCHEDULE_RUNTIME_CACHE = {}
-
-SECURITY_HOURLY_CACHE_RETENTION_DAYS = 15
-SECURITY_DAILY_CACHE_RETENTION_DAYS = 30
-SECURITY_INDEX_CACHE_RETENTION_DAYS = 300
-FUND_ESTIMATE_HISTORY_RETENTION_DAYS = 300
-
-ANCHOR_CACHE_STABLE_RETENTION_DAYS = 300
-ANCHOR_TRANSIENT_CACHE_HOURS = 2
-ANCHOR_PENDING_CACHE_HOURS = 1
 ANCHOR_MARKET_STATUSES = {"traded", "closed", "pending", "missing", "stale"}
 ANCHOR_COMPLETE_STATUSES = {"traded", "closed"}
 ANCHOR_BAD_STATUSES = {"pending", "missing", "stale"}
@@ -1479,7 +1488,7 @@ def get_fund_purchase_limit_uncached(fund_code: str, timeout=8) -> str:
 def get_fund_purchase_limit(
     fund_code: str,
     timeout=8,
-    cache_days=7,
+    cache_days=FUND_PURCHASE_LIMIT_CACHE_DAYS,
     cache_enabled=True,
 ) -> str:
     """
@@ -2028,7 +2037,13 @@ def _best_daily_result_from_ordered_sources(
         if source_name in prepared_cache:
             return prepared_cache[source_name]
         try:
-            df = fetcher()
+            df = timed_market_call(
+                fetcher,
+                action="daily_source_fetch",
+                source=source_name,
+                market=market,
+                ticker=symbol,
+            )
             prepared = _prepare_daily_price_frame(df, source_name, end_date_key)
             prepared_cache[source_name] = prepared
             return prepared
@@ -3070,7 +3085,13 @@ def fetch_us_return_pct_daily_with_date(ticker, end_date=None):
     def _try_source(source_name, fetcher):
         nonlocal best_stale_result
         try:
-            result = fetcher()
+            result = timed_market_call(
+                fetcher,
+                action="daily_source_fetch",
+                source=source_name,
+                market="US",
+                ticker=ticker,
+            )
             _, trade_date, _ = result
             trade_date_key = _normalize_trade_date_key(trade_date)
             if not end_date_key or trade_date_key == end_date_key:
@@ -3463,6 +3484,14 @@ def get_stock_return_pct(
 
         if cache_key in _SECURITY_RETURN_RUNTIME_CACHE and not needs_trade_date_cache:
             _cache_log(f"使用本轮内存行情缓存: {cache_key}")
+            record_market_event(
+                action="security_cache",
+                source="runtime_hourly_cache",
+                market=market,
+                ticker=ticker_norm or ticker,
+                outcome="cache_hit",
+                cache_hit=True,
+            )
             result = _SECURITY_RETURN_RUNTIME_CACHE[cache_key]
             if return_trade_date:
                 return float(result[0]), result[1], ""
@@ -3496,6 +3525,15 @@ def get_stock_return_pct(
                                 cached_trade_date = _normalize_trade_date_key(zero_trade_date)
                             _SECURITY_RETURN_RUNTIME_CACHE[cache_key] = result
                             _cache_log(f"使用文件行情缓存: {cache_key} -> {result[0]:+.4f}% trade_date={cached_trade_date}")
+                            record_market_event(
+                                action="security_cache",
+                                source="file_trade_date_cache",
+                                market=market,
+                                ticker=ticker_norm,
+                                outcome="cache_hit",
+                                cache_hit=True,
+                                status=str(item.get("status", "")),
+                            )
                             if return_trade_date:
                                 return result[0], result[1], cached_trade_date
                             return result
@@ -3504,6 +3542,14 @@ def get_stock_return_pct(
                         result = (float(item["return_pct"]), item.get("source", "file_cache"))
                         _SECURITY_RETURN_RUNTIME_CACHE[cache_key] = result
                         _cache_log(f"使用文件行情缓存: {cache_key} -> {result[0]:+.4f}%")
+                        record_market_event(
+                            action="security_cache",
+                            source="file_hourly_cache",
+                            market=market,
+                            ticker=ticker_norm,
+                            outcome="cache_hit",
+                            cache_hit=True,
+                        )
                         if return_trade_date:
                             return result[0], result[1], _normalize_trade_date_key(item.get("trade_date", ""))
                         return result
@@ -3569,6 +3615,15 @@ def get_stock_return_pct(
     except Exception as e:
         if needs_trade_date_cache and item:
             _cache_log(f"行情刷新失败，使用旧缓存: {cache_key}, 原因: {e}")
+            record_market_event(
+                action="security_cache",
+                source="stale_file_cache_after_fetch_fail",
+                market=market,
+                ticker=ticker_norm,
+                outcome="cache_hit_after_failure",
+                cache_hit=True,
+                error=str(e),
+            )
             try:
                 cache = cache or _load_json_cache(SECURITY_RETURN_CACHE_FILE, default={})
                 old_entry = _mark_last_close_cache_checked(dict(item))
@@ -3821,18 +3876,46 @@ def get_security_return_by_anchor_date(
     if security_return_cache_enabled:
         cached = _SECURITY_RETURN_RUNTIME_CACHE.get(cache_key)
         if isinstance(cached, dict) and _is_anchor_cache_entry_fresh(cached):
+            record_market_event(
+                action="anchor_cache",
+                source="runtime_anchor_cache",
+                market=market_norm,
+                ticker=ticker_norm,
+                outcome="cache_hit",
+                cache_hit=True,
+                status=str(cached.get("status", "")),
+            )
             return dict(cached)
 
         cache = _load_json_cache(SECURITY_RETURN_CACHE_FILE, default={})
         item = cache.get(cache_key) if isinstance(cache, dict) else None
         if isinstance(item, dict) and _is_anchor_cache_entry_fresh(item):
             _SECURITY_RETURN_RUNTIME_CACHE[cache_key] = dict(item)
+            record_market_event(
+                action="anchor_cache",
+                source="file_anchor_cache",
+                market=market_norm,
+                ticker=ticker_norm,
+                outcome="cache_hit",
+                cache_hit=True,
+                status=str(item.get("status", "")),
+            )
             return dict(item)
 
     try:
         schedule = _market_schedule(market_norm, anchor, anchor)
         calendar_is_open = bool(schedule is not None and not schedule.empty)
     except Exception as exc:
+        record_market_event(
+            action="anchor_calendar",
+            source="market_calendar",
+            market=market_norm,
+            ticker=ticker_norm,
+            outcome="failed",
+            cache_hit=False,
+            status="missing",
+            error=str(exc),
+        )
         entry = _anchor_return_result(
             market=market_norm,
             ticker=ticker_norm,
@@ -3848,6 +3931,15 @@ def get_security_return_by_anchor_date(
         return entry
 
     if not calendar_is_open:
+        record_market_event(
+            action="anchor_calendar",
+            source="market_calendar",
+            market=market_norm,
+            ticker=ticker_norm,
+            outcome="closed",
+            cache_hit=False,
+            status="closed",
+        )
         entry = _anchor_return_result(
             market=market_norm,
             ticker=ticker_norm,
@@ -3863,6 +3955,15 @@ def get_security_return_by_anchor_date(
         return entry
 
     if not _market_session_complete(market_norm, anchor, now=now):
+        record_market_event(
+            action="anchor_calendar",
+            source="market_close_not_confirmed",
+            market=market_norm,
+            ticker=ticker_norm,
+            outcome="pending",
+            cache_hit=False,
+            status="pending",
+        )
         entry = _anchor_return_result(
             market=market_norm,
             ticker=ticker_norm,
@@ -3884,6 +3985,16 @@ def get_security_return_by_anchor_date(
             anchor,
         )
     except Exception as exc:
+        record_market_event(
+            action="anchor_daily_fetch",
+            source="daily_fetch_failed",
+            market=market_norm,
+            ticker=ticker_norm,
+            outcome="failed",
+            cache_hit=False,
+            status="missing",
+            error=str(exc),
+        )
         entry = _anchor_return_result(
             market=market_norm,
             ticker=ticker_norm,
@@ -3901,6 +4012,15 @@ def get_security_return_by_anchor_date(
 
     trade_date_norm = _normalize_trade_date_key(trade_date)
     if trade_date_norm == anchor:
+        record_market_event(
+            action="anchor_daily_fetch",
+            source=source,
+            market=market_norm,
+            ticker=ticker_norm,
+            outcome="success",
+            cache_hit=False,
+            status="traded",
+        )
         entry = _anchor_return_result(
             market=market_norm,
             ticker=ticker_norm,
@@ -3913,6 +4033,16 @@ def get_security_return_by_anchor_date(
         )
     else:
         relation = "empty" if not trade_date_norm else ("older" if trade_date_norm < anchor else "future")
+        record_market_event(
+            action="anchor_daily_fetch",
+            source=source,
+            market=market_norm,
+            ticker=ticker_norm,
+            outcome="stale",
+            cache_hit=False,
+            status="stale",
+            error=f"trade_date={trade_date_norm or '空'} 与 valuation_anchor_date={anchor} 不一致",
+        )
         entry = _anchor_return_result(
             market=market_norm,
             ticker=ticker_norm,
@@ -5349,8 +5479,8 @@ def estimate_one_fund(
     renormalize_available_holdings=True,
     include_purchase_limit=True,
     purchase_limit_timeout=8,
-    purchase_limit_cache_days=7,
-    holding_cache_days=75,
+    purchase_limit_cache_days=FUND_PURCHASE_LIMIT_CACHE_DAYS,
+    holding_cache_days=FUND_HOLDINGS_CACHE_DAYS,
     cache_enabled=True,
     security_return_cache_enabled=True,
     cn_hk_hourly_cache=True,
@@ -5511,8 +5641,8 @@ def estimate_funds(
     renormalize_available_holdings=True,
     include_purchase_limit=True,
     purchase_limit_timeout=8,
-    purchase_limit_cache_days=7,
-    holding_cache_days=75,
+    purchase_limit_cache_days=FUND_PURCHASE_LIMIT_CACHE_DAYS,
+    holding_cache_days=FUND_HOLDINGS_CACHE_DAYS,
     cache_enabled=True,
     security_return_cache_enabled=True,
     cn_hk_hourly_cache=True,
@@ -5713,23 +5843,73 @@ def _write_failed_holdings_report(
     detail_map,
     valuation_anchor_date,
     output_file: str | Path = "output/failed_holdings_latest.txt",
-) -> None:
+) -> dict:
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
     anchor = _normalize_trade_date_key(valuation_anchor_date)
+    generated_at = datetime.now().isoformat(timespec="seconds")
     lines = [
         f"valuation_anchor_date: {anchor or '未知'}",
-        f"generated_at: {datetime.now().isoformat(timespec='seconds')}",
+        f"generated_at: {generated_at}",
         "",
     ]
 
-    rows = []
+    unique_map = {}
+    failed_rows = []
+
+    status_rank = {
+        "traded": 0,
+        "closed": 1,
+        "pending": 2,
+        "stale": 3,
+        "missing": 4,
+        "failed": 5,
+    }
+
+    def normalize_status(value, source=""):
+        status = str(value or "").strip().lower()
+        if status in status_rank:
+            return status
+        if str(source or "").strip().lower() == "failed":
+            return "failed"
+        return "missing" if status else "missing"
+
+    def update_unique(row):
+        market = str(row.get("market", "") or "").strip().upper()
+        ticker = str(row.get("ticker", "") or "").strip().upper()
+        holding_name = str(row.get("holding_name", "") or "").strip()
+        if not market and not ticker and not holding_name:
+            return
+        key = (market, ticker or holding_name)
+        status = normalize_status(row.get("status"), row.get("source"))
+        fund_code = str(row.get("fund_code", "") or "").strip()
+        current = unique_map.get(key)
+        if current is None:
+            unique_map[key] = {
+                "market": market,
+                "ticker": ticker,
+                "status": status,
+                "trade_date": str(row.get("trade_date", "") or "").strip(),
+                "source": str(row.get("source", "") or "").strip(),
+                "error": str(row.get("error", "") or "").strip(),
+                "affected_funds": [fund_code] if fund_code else [],
+            }
+            return
+
+        if fund_code and fund_code not in current["affected_funds"]:
+            current["affected_funds"].append(fund_code)
+        if status_rank.get(status, 4) > status_rank.get(current.get("status", ""), 4):
+            current["status"] = status
+            current["trade_date"] = str(row.get("trade_date", "") or "").strip()
+            current["source"] = str(row.get("source", "") or "").strip()
+            current["error"] = str(row.get("error", "") or "").strip()
+
     if isinstance(detail_map, dict):
         for fund_code, item in detail_map.items():
             if not isinstance(item, dict):
                 continue
 
             if item.get("error"):
-                rows.append({
+                row = {
                     "fund_code": fund_code,
                     "holding_name": "基金估算失败",
                     "market": "",
@@ -5738,7 +5918,9 @@ def _write_failed_holdings_report(
                     "trade_date": "",
                     "source": "",
                     "error": str(item.get("error")),
-                })
+                }
+                failed_rows.append(row)
+                update_unique(row)
                 continue
 
             detail_df = item.get("detail_df")
@@ -5748,28 +5930,128 @@ def _write_failed_holdings_report(
             for _, row in detail_df.iterrows():
                 status = str(row.get("锚点状态", "")).strip().lower()
                 source = str(row.get("收益数据源", "")).strip()
-                if status not in ANCHOR_BAD_STATUSES and source != "failed":
-                    continue
-                rows.append({
+                report_row = {
                     "fund_code": fund_code,
                     "holding_name": str(row.get("股票名称", row.get("name", ""))).strip(),
                     "market": str(row.get("市场", "")).strip(),
                     "ticker": str(row.get("ticker", row.get("code", ""))).strip(),
-                    "status": status or "failed",
+                    "status": normalize_status(status, source),
                     "trade_date": str(row.get("收益交易日", "")).strip(),
                     "source": source,
                     "error": str(row.get("锚点错误", "")).strip(),
-                })
+                }
+                update_unique(report_row)
+                if report_row["status"] in ANCHOR_BAD_STATUSES or source == "failed":
+                    failed_rows.append(report_row)
 
-    if not rows:
+    unique_rows = sorted(
+        unique_map.values(),
+        key=lambda item: (
+            -status_rank.get(str(item.get("status", "")).lower(), 4),
+            str(item.get("market", "")),
+            str(item.get("ticker", "")),
+        ),
+    )
+    status_counts = {}
+    for item in unique_rows:
+        status = normalize_status(item.get("status"))
+        status_counts[status] = status_counts.get(status, 0) + 1
+
+    bad_unique_rows = [
+        item for item in unique_rows
+        if normalize_status(item.get("status")) in {"pending", "missing", "stale", "failed"}
+    ]
+    event_snapshot = snapshot_market_events()
+    event_summary = summarize_market_events(event_snapshot)
+
+    lines.append("运行汇总")
+    lines.append(f"fund_count: {len(detail_map) if isinstance(detail_map, dict) else 0}")
+    lines.append(f"unique_security_count: {len(unique_rows)}")
+    lines.append(f"bad_unique_security_count: {len(bad_unique_rows)}")
+    for status in ["traded", "closed", "pending", "missing", "stale", "failed"]:
+        lines.append(f"status_{status}: {status_counts.get(status, 0)}")
+    lines.append("")
+
+    lines.extend(format_market_stats_lines(event_snapshot))
+    lines.append("")
+
+    lines.append("唯一证券汇总")
+    if unique_rows:
+        headers = ["market", "ticker", "status", "trade_date", "source", "affected_fund_count", "affected_funds", "error"]
+        lines.append("\t".join(headers))
+        for item in unique_rows:
+            affected = item.get("affected_funds", []) or []
+            row = {
+                "market": item.get("market", ""),
+                "ticker": item.get("ticker", ""),
+                "status": item.get("status", ""),
+                "trade_date": item.get("trade_date", ""),
+                "source": item.get("source", ""),
+                "affected_fund_count": len(affected),
+                "affected_funds": ",".join(affected),
+                "error": item.get("error", ""),
+            }
+            lines.append("\t".join(str(row.get(header, "") or "") for header in headers))
+    else:
+        lines.append("本次未收集到证券明细。")
+    lines.append("")
+
+    lines.append("失败/未完成持仓明细")
+    if not failed_rows:
         lines.append("本次无 pending/missing/stale/failed 持仓。")
     else:
         headers = ["fund_code", "holding_name", "market", "ticker", "status", "trade_date", "source", "error"]
         lines.append("\t".join(headers))
-        for row in rows:
+        for row in failed_rows:
             lines.append("\t".join(str(row.get(header, "") or "") for header in headers))
 
     Path(output_file).write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {
+        "output_file": str(output_file),
+        "fund_count": len(detail_map) if isinstance(detail_map, dict) else 0,
+        "unique_security_count": len(unique_rows),
+        "bad_unique_security_count": len(bad_unique_rows),
+        "bad_unique_tickers": [
+            f"{item.get('market', '')}:{item.get('ticker', '') or item.get('source', '')}"
+            for item in bad_unique_rows
+        ],
+        "status_counts": status_counts,
+        "event_summary": event_summary,
+    }
+
+
+def _print_failed_holdings_report_summary(summary: dict) -> None:
+    if not isinstance(summary, dict):
+        return
+    status_counts = summary.get("status_counts", {}) if isinstance(summary.get("status_counts"), dict) else {}
+    bad_tickers = summary.get("bad_unique_tickers", []) or []
+    event_summary = summary.get("event_summary", {}) if isinstance(summary.get("event_summary"), dict) else {}
+    status_text = ", ".join(
+        f"{key}={status_counts.get(key, 0)}"
+        for key in ["traded", "closed", "pending", "missing", "stale", "failed"]
+        if status_counts.get(key, 0)
+    ) or "无状态统计"
+    print(
+        "[REPORT] 持仓行情汇总: "
+        f"基金 {summary.get('fund_count', 0)} 只, "
+        f"唯一证券 {summary.get('unique_security_count', 0)} 个, "
+        f"异常证券 {summary.get('bad_unique_security_count', 0)} 个; {status_text}",
+        flush=True,
+    )
+    if bad_tickers:
+        preview = "、".join(str(x) for x in bad_tickers[:12])
+        if len(bad_tickers) > 12:
+            preview += " 等"
+        print(f"[REPORT] 异常证券: {preview}", flush=True)
+    print(
+        "[REPORT] 行情统计: "
+        f"events={event_summary.get('event_count', 0)}, "
+        f"cache_hits={event_summary.get('cache_hits', 0)}, "
+        f"network_attempts={event_summary.get('network_attempts', 0)}, "
+        f"failures={event_summary.get('failure_count', 0)}",
+        flush=True,
+    )
+    print(f"[REPORT] 失败持仓报告: {summary.get('output_file', '')}", flush=True)
 
 
 # 市场基准：直接获取指数涨跌幅。
@@ -7948,8 +8230,8 @@ def estimate_funds_and_save_table(
     renormalize_available_holdings=True,
     include_purchase_limit=True,
     purchase_limit_timeout=8,
-    purchase_limit_cache_days=7,
-    holding_cache_days=75,
+    purchase_limit_cache_days=FUND_PURCHASE_LIMIT_CACHE_DAYS,
+    holding_cache_days=FUND_HOLDINGS_CACHE_DAYS,
     cache_enabled=True,
     security_return_cache_enabled=True,
     cn_hk_hourly_cache=True,
@@ -8153,7 +8435,8 @@ def estimate_funds_and_save_table(
     )
 
     if auto_overseas_residual_enabled:
-        _write_failed_holdings_report(detail_map, overseas_valuation_date)
+        report_summary = _write_failed_holdings_report(detail_map, overseas_valuation_date)
+        _print_failed_holdings_report_summary(report_summary)
 
     # 缓存基金级每日预估收益，供 safe_fund.py 只读缓存绘制公开展示图。
     # 当前项目只写入海外/全球基金缓存，国内基金业务线已停用。
@@ -8262,8 +8545,8 @@ def get_jijin_holdings(
     renormalize_available_holdings=True,
     include_purchase_limit=True,
     purchase_limit_timeout=8,
-    purchase_limit_cache_days=7,
-    holding_cache_days=75,
+    purchase_limit_cache_days=FUND_PURCHASE_LIMIT_CACHE_DAYS,
+    holding_cache_days=FUND_HOLDINGS_CACHE_DAYS,
     cache_enabled=True,
     security_return_cache_enabled=True,
     cn_hk_hourly_cache=True,

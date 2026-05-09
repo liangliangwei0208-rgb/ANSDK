@@ -87,6 +87,7 @@
 - `tools/configs/residual_benchmark_configs.py`：海外股票持仓型基金的补偿仓位基准配置。默认使用纳斯达克100；可按基金代码指定其他基准，例如 `007844` 使用 `XOP` 作为美国油气开采方向代理。
 - `tools/configs/market_benchmark_configs.py`：safe 海外基金图底部“基准表”的指数、ETF、海外资产和点位观察指标配置。想隐藏某个基准，把 `enabled` 改为 `False`；隐藏不会删除旧缓存，但 safe 图不会继续展示该项。当前默认启用纳斯达克100、标普500、XOP、费城半导体、现货黄金和每日图 VIX 点位。
 - `tools/configs/safe_image_style_configs.py`：safe 公开图的统一样式配置。标题字号/颜色/间距、图片四周留白、表头底色、正文底色、涨跌颜色、表格行距、列宽、备注字号、水印文字、logo 透明度等都从这里维护，优先不要去绘图函数里硬改。
+- `tools/configs/cache_policy_configs.py`：缓存有效期配置。限购缓存 7 天、A 股交易日历 7 天、证券/指数/基金历史保留天数、RSI ETF 实时补点新鲜度等都从这里维护。
 - `tools/configs/security_mappings.py`：美股 / 韩国证券代码映射；韩国六位数字代码需要配合名称别名匹配，避免误判 A 股。
 - `tools/configs/rsi_configs.py`：市场 RSI 图标的配置。
 - `tools/configs/market_calendar_configs.py`：市场交易日历名称、收盘缓冲、韩国节假日置零策略。
@@ -245,14 +246,18 @@ safe 公开图的视觉样式已集中到 `tools/configs/safe_image_style_config
   - RSI / 指数行情 CSV 缓存。
   - 缓存已在当天检查过，或最新日期满足当前运行需求时，优先直接使用。
   - 国内 ETF 且 `include_realtime=True` 时只补实时点，不重拉整段历史。
+- `output/failed_holdings_latest.txt`：
+  - 每轮海外基金估算后覆盖写入，不追加历史。
+  - 包含运行汇总、行情请求统计、唯一证券汇总、失败/未完成持仓明细。
+  - 这是本地排查文件，不进入邮件正文，不影响图片生成。
+- 行情请求统计：
+  - 只存在当前 Python 进程内，不写 JSON。
+  - 控制台只打印摘要，完整明细写入 `output/failed_holdings_latest.txt`。
 - `fund_holdings_cache.json` 和 `fund_purchase_limit_cache.json` 按基金代码覆盖或按既有策略更新，不做批量删除。
 
 ## 后续可优化方向
 
-- 增加行情请求统计日志：记录每个数据源的请求次数、缓存命中次数、失败原因和耗时，方便判断接口压力和不稳定源。
 - 增加只读数据源健康检查脚本：集中探测新浪、东方财富、AkShare、CBOE/FRED、Yahoo fallback 是否可用，不写基金缓存。
-- 把缓存有效期集中配置化：证券日缓存、指数缓存、A 股交易日历缓存、限购缓存等可以集中维护；限购缓存仍需严格保持 7 天有效期。
-- 增加本轮唯一证券汇总报告：运行前或运行后打印唯一 ticker、已命中锚点缓存、实际联网、missing/stale 列表，便于定位异常基金。
 - 补强美股特殊代码和持仓映射：石油、能源、ADR、改名或退市证券更容易出现行情源滞后，可逐步沉淀到映射或代理配置。
 - 给 safe 图增加自动视觉回归检查：检查图片尺寸、非空、水印、表格行数、VIX 是否只在每日图出现，减少样式配置改动后的人工检查成本。
 
@@ -293,6 +298,12 @@ $files = @('.\git_main.py','.\check_project.py','.\main.py','.\fund_estimate_bre
 & F:\anaconda\envs\py310\python.exe .\safe_fund.py
 & F:\anaconda\envs\py310\python.exe .\safe_holidays.py
 & F:\anaconda\envs\py310\python.exe .\fund_estimate_breakdown.py
+```
+
+检查最新失败持仓和唯一证券汇总：
+
+```powershell
+Get-Content .\output\failed_holdings_latest.txt -Encoding UTF8 -TotalCount 120
 ```
 
 节后补更新测试：
@@ -338,6 +349,7 @@ print("RSI缓存样本", df.tail(1).to_string(index=False))
 - safe 图文字大小、颜色、表头色、底色、水印不满意：优先改 `tools/configs/safe_image_style_configs.py`，再单独运行 `safe_fund.py`、`safe_holidays.py` 或 `sum_holidays.py --today <日期>` 预览。
 - A 股节假日判断频繁联网：检查 `cache/a_share_trade_calendar_cache.json` 是否存在、`fetched_at` 是否在 7 天内；缓存新鲜时脚本日志应显示 `fresh`。
 - RSI 图仍频繁重拉历史：检查对应 `cache/*_index_daily.csv` 是否存在、最新日期是否足够新，以及文件是否已在当天检查过。
+- 需要查看本轮异常持仓：打开 `output/failed_holdings_latest.txt`，先看“运行汇总”和“唯一证券汇总”，再看底部“失败/未完成持仓明细”。
 
 ## 最近完成的改动
 
@@ -364,3 +376,4 @@ print("RSI缓存样本", df.tail(1).to_string(index=False))
 - 新增 `tools/configs/safe_image_style_configs.py`，safe 公开图的标题、表格、颜色、列宽、备注和水印统一配置化；标题和表格间距已收紧，表头底色调为较浅的 `#3f4d66`。
 - A 股、港股、美股日收益口径已加固为涨跌幅列/复权价/调整后收盘价优先，裸收盘价最后兜底；旧 A 股和港股裸 close 缓存会自动刷新，美股异常大裸 close 涨跌会触发重试。
 - 新增 A 股交易日历文件缓存、市场日历运行期缓存和 RSI 缓存优先逻辑，降低重复行情请求；美股 Yahoo 兜底失败时只记录错误并标记 missing/stale，不中断主流程。
+- 新增 `tools/configs/cache_policy_configs.py` 和 `tools/runtime_stats.py`；`failed_holdings_latest.txt` 已增强为运行汇总、行情请求统计、唯一证券汇总和失败持仓明细的综合排查报告。

@@ -96,6 +96,7 @@ AHNS 是一个个人公开数据建模复盘项目，用于生成每日市场 RS
 - `tools/configs/residual_benchmark_configs.py`：维护海外股票持仓型基金的补偿仓位基准；默认纳斯达克100，`007844` 当前使用 `XOP`。
 - `tools/configs/market_benchmark_configs.py`：维护 safe 海外基金图底部基准表。这里决定展示哪些指数、ETF 或海外资产，以及使用新浪、AKShare、东方财富还是 Yahoo 路径。
 - `tools/configs/safe_image_style_configs.py`：维护 safe 公开图样式。标题文字、标题和表格间距、表头底色、正文底色、表格线、行高、列宽、涨跌颜色、底部备注、水印文字和透明度都优先在这里改。
+- `tools/configs/cache_policy_configs.py`：维护缓存有效期。限购 7 天、A 股交易日历 7 天、证券/指数/基金历史保留天数、RSI ETF 实时补点新鲜度等都集中在这里。
 - `tools/configs/security_mappings.py`：维护美股 / 韩国证券映射。
 - `tools/configs/rsi_configs.py`：维护 RSI 图标的列表。
 - `tools/paths.py`：集中维护常用缓存和输出图片路径。
@@ -267,6 +268,8 @@ Matplotlib 表格和 RSI 图默认使用 180 DPI，科普图使用 Pillow 固定
 - 基准表记录写在 `fund_estimate_return_cache.json` 的 `benchmark_records`；显示端会按 `market_benchmark_configs.py` 的 `enabled=True`、`display_in_holidays`、`include_in_cumulative` 过滤。VIX 只在每日海外基金图展示点位，不进入节假日累计图和区间复利。
 - `a_share_trade_calendar_cache.json` 保存 A 股交易日历，字段包含 `fetched_at`、`source`、`trade_dates`。默认 7 天有效；这是节假日判断和节后补更新判断的重要降频缓存。
 - `*_index_daily.csv` 是 RSI/指数行情 CSV 缓存。主流程会优先读缓存，只有缓存不满足当前运行需求时才联网刷新。
+- `output/failed_holdings_latest.txt` 每轮海外基金估算后覆盖写入，包含运行汇总、行情请求统计、唯一证券汇总和失败/未完成持仓明细。它是本地排查文件，不进入邮件正文。
+- 行情请求统计只保存在当前 Python 进程内，不写 JSON；用于控制台摘要和 `failed_holdings_latest.txt`。
 - 指数行情和基金估算历史保留 300 天。
 - Actions 运行后会自动回推缓存变化。
 
@@ -297,10 +300,7 @@ Matplotlib 表格和 RSI 图默认使用 180 DPI，科普图使用 Pillow 固定
 
 当前比较值得继续优化的地方：
 
-- 增加行情请求统计日志：记录每次运行各数据源的请求次数、缓存命中次数、失败原因和耗时，方便判断哪些接口最慢、最不稳定。
 - 增加一个只读数据源健康检查脚本：集中探测新浪、东方财富、AkShare、CBOE/FRED、Yahoo fallback 是否可用，不写基金缓存，便于 Actions 或本地运行前快速判断网络状态。
-- 把缓存有效期集中配置化：例如证券日缓存、指数缓存、A 股交易日历缓存、限购缓存等都放到一个配置入口；限购缓存仍应保持严格 7 天有效期。
-- 对同一轮基金估算中的证券做批量汇总报告：虽然锚点缓存和运行期缓存已经减少重复请求，但仍可在日志里先列出本轮唯一证券、命中缓存数量、实际联网数量和失败证券，排查会更直观。
 - 补强美股特殊代码和基金持仓映射：石油、能源、ADR、改名或退市证券更容易出现行情源滞后，后续可把常见问题 ticker 写入映射或替代代理配置。
 - 给 safe 图增加自动视觉回归检查：对输出图片做基础尺寸、非空、水印存在、表格行数和 VIX/累计过滤检查，避免样式配置改动后才在发布时发现异常。
 
@@ -324,6 +324,12 @@ $files = @('.\git_main.py','.\check_project.py','.\main.py','.\fund_estimate_bre
 & F:\anaconda\envs\py310\python.exe .\safe_fund.py
 & F:\anaconda\envs\py310\python.exe .\safe_holidays.py
 & F:\anaconda\envs\py310\python.exe .\sum_holidays.py --today 2026-05-07
+```
+
+检查最新失败持仓和唯一证券汇总：
+
+```powershell
+Get-Content .\output\failed_holdings_latest.txt -Encoding UTF8 -TotalCount 120
 ```
 
 检查估算拆解：

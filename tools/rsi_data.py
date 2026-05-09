@@ -30,6 +30,9 @@ from matplotlib.collections import LineCollection
 import time
 import requests
 
+from tools.configs.cache_policy_configs import RSI_CN_ETF_REALTIME_CACHE_MAX_AGE_DAYS
+from tools.runtime_stats import record_market_event, timed_market_call
+
 rule = "ME"
 
 # 默认中文名称映射；可在 rsi_analyze_index(display_name=...) 中覆盖。
@@ -299,17 +302,39 @@ def _read_usable_index_cache(
     today = pd.Timestamp.today().normalize()
 
     if include_realtime and _is_cn_etf_symbol(symbol):
-        if pd.notna(latest_date) and latest_date.normalize() >= today - pd.Timedelta(days=10):
+        if pd.notna(latest_date) and latest_date.normalize() >= today - pd.Timedelta(days=RSI_CN_ETF_REALTIME_CACHE_MAX_AGE_DAYS):
             cached = _merge_cn_etf_realtime_today(cached, symbol=symbol)
+            record_market_event(
+                action="rsi_cache",
+                source="local_csv_plus_realtime",
+                market="CN",
+                ticker=symbol,
+                outcome="cache_hit",
+                cache_hit=True,
+            )
             print(f"[CACHE] RSI 使用本地历史缓存并补充实时点: {symbol} -> {cache_file}")
             return cached.tail(days).copy()
         return None
 
     if _cache_file_modified_today(cache_file):
+        record_market_event(
+            action="rsi_cache",
+            source="local_csv_checked_today",
+            ticker=symbol,
+            outcome="cache_hit",
+            cache_hit=True,
+        )
         print(f"[CACHE] RSI 使用今日已检查的本地缓存: {symbol} -> {cache_file}")
         return cached.tail(days).copy()
 
     if pd.notna(latest_date) and latest_date.normalize() >= today:
+        record_market_event(
+            action="rsi_cache",
+            source="local_csv_contains_today",
+            ticker=symbol,
+            outcome="cache_hit",
+            cache_hit=True,
+        )
         print(f"[CACHE] RSI 使用已包含今日数据的本地缓存: {symbol} -> {cache_file}")
         return cached.tail(days).copy()
 
@@ -1091,7 +1116,12 @@ def get_index_akshare(
 
     for i in range(max(1, retry)):
         try:
-            df = try_fetch_once()
+            df = timed_market_call(
+                try_fetch_once,
+                action="rsi_network_fetch",
+                source="get_index_akshare",
+                ticker=symbol,
+            )
 
             if use_cache:
                 df.to_csv(cache_file, index=False, encoding="utf-8-sig")
@@ -1114,6 +1144,13 @@ def get_index_akshare(
         if include_realtime and _is_cn_etf_symbol(symbol):
             df = _merge_cn_etf_realtime_today(df, symbol=symbol)
 
+        record_market_event(
+            action="rsi_cache",
+            source="local_csv_after_network_fail",
+            ticker=symbol,
+            outcome="cache_hit",
+            cache_hit=True,
+        )
         return df.tail(days).copy()
 
     raise RuntimeError(
