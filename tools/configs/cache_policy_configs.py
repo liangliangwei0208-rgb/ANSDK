@@ -16,11 +16,8 @@ SECURITY_INDEX_CACHE_RETENTION_DAYS = 300
 FUND_ESTIMATE_HISTORY_RETENTION_DAYS = 300
 ANCHOR_CACHE_STABLE_RETENTION_DAYS = 300
 
-# 锚点行情的短期重试窗口。pending 更快重试，missing/stale 稍慢重试。
-# 如果某个证券的锚点行情缓存是 pending，脚本在 1 小时内会先复用这个结果，避免反复请求接口；超过 1 小时后，下次运行就会重新拉取。
-# 如果状态是 missing 或 stale，脚本会等 2 小时后再重试。因为这类情况更像接口失败、源站延迟或当天数据没同步，太频繁重试意义不大。
-ANCHOR_PENDING_CACHE_HOURS = 1
-ANCHOR_TRANSIENT_CACHE_HOURS = 2
+# 锚点行情缓存读取侧只复用 traded / closed。
+# pending / missing / stale 仍会写入缓存用于排查，但不会阻止下次运行重新请求接口。
 
 # 基金限购缓存必须严格 7 天有效，不要改成固定每周刷新。
 FUND_PURCHASE_LIMIT_CACHE_DAYS = 7
@@ -43,8 +40,6 @@ __all__ = [
     "SECURITY_INDEX_CACHE_RETENTION_DAYS",
     "FUND_ESTIMATE_HISTORY_RETENTION_DAYS",
     "ANCHOR_CACHE_STABLE_RETENTION_DAYS",
-    "ANCHOR_PENDING_CACHE_HOURS",
-    "ANCHOR_TRANSIENT_CACHE_HOURS",
     "FUND_PURCHASE_LIMIT_CACHE_DAYS",
     "FUND_HOLDINGS_CACHE_DAYS",
     "A_SHARE_TRADE_CALENDAR_CACHE_DAYS",

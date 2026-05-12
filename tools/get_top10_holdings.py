@@ -93,8 +93,6 @@ from tools.configs.market_calendar_configs import (
 from tools.configs.market_benchmark_configs import MARKET_BENCHMARK_ITEMS
 from tools.configs.cache_policy_configs import (
     ANCHOR_CACHE_STABLE_RETENTION_DAYS,
-    ANCHOR_PENDING_CACHE_HOURS,
-    ANCHOR_TRANSIENT_CACHE_HOURS,
     FUND_ESTIMATE_HISTORY_RETENTION_DAYS,
     FUND_HOLDINGS_CACHE_DAYS,
     FUND_PURCHASE_LIMIT_CACHE_DAYS,
@@ -500,13 +498,13 @@ def _is_anchor_cache_entry_fresh(item: dict) -> bool:
     status = str(item.get("status", "")).strip().lower()
     market = str(item.get("market", "")).strip().upper()
     source_text = str(item.get("source", "")).strip().lower()
+    if status not in ANCHOR_COMPLETE_STATUSES:
+        return False
+
     if market == "FOREIGN_FUTURES":
-        if status in ANCHOR_COMPLETE_STATUSES:
-            if _foreign_futures_cached_before_final_confirm(item):
-                return False
-            if not _foreign_futures_is_final_confirmed(item.get("valuation_anchor_date")):
-                return False
-        if status == "pending" and _foreign_futures_is_final_confirmed(item.get("valuation_anchor_date")):
+        if _foreign_futures_cached_before_final_confirm(item):
+            return False
+        if not _foreign_futures_is_final_confirmed(item.get("valuation_anchor_date")):
             return False
 
     if (
@@ -535,23 +533,7 @@ def _is_anchor_cache_entry_fresh(item: dict) -> bool:
                 return False
         except Exception:
             pass
-    if status in {"traded", "closed"}:
-        return True
-
-    if market == "US" and status == "stale":
-        source_error_text = f"{item.get('source', '')} {item.get('error', '')}".lower()
-        # 旧版本美股只用新浪日线；如果新浪停在前一天，会缓存 stale。
-        # 现在新增了东方财富 / Yahoo 日线兜底，所以这类旧 stale 不应继续挡住重试。
-        if "ak_stock_us_daily_trade_date_older_than_anchor" in source_error_text:
-            return False
-
-    if market in {"CN", "HK"} and status in {"missing", "stale"}:
-        source_error_text = f"{item.get('source', '')} {item.get('error', '')}".lower()
-        if "sina" not in source_error_text:
-            return False
-
-    max_age_hours = ANCHOR_PENDING_CACHE_HOURS if status == "pending" else ANCHOR_TRANSIENT_CACHE_HOURS
-    return _is_cache_fresh(item.get("fetched_at"), max_age_hours=max_age_hours)
+    return True
 
 
 def _save_anchor_security_cache_entry(cache_key: str, entry: dict) -> None:
