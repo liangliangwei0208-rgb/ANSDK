@@ -16,8 +16,9 @@ rsi_module.py
 """
 
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import re
 import numpy as np
@@ -31,6 +32,10 @@ import time
 import requests
 
 from tools.configs.cache_policy_configs import RSI_CN_ETF_REALTIME_CACHE_MAX_AGE_DAYS
+from tools.configs.market_calendar_configs import (
+    MARKET_CALENDAR_NAMES,
+    MARKET_CLOSE_BUFFER_HOURS,
+)
 from tools.runtime_stats import record_market_event, timed_market_call
 
 rule = "ME"
@@ -279,6 +284,47 @@ def _cache_file_modified_today(cache_file: Path) -> bool:
         return False
 
 
+def _infer_rsi_cache_market(symbol: str) -> str:
+    symbol_text = str(symbol or "").strip().upper()
+    if symbol_text.startswith(".") or symbol_text.startswith("^"):
+        return "US"
+    if _is_cn_etf_symbol(symbol_text) or symbol_text.isdigit() or symbol_text.startswith("H"):
+        return "CN"
+    return ""
+
+
+def _latest_complete_rsi_trade_date(symbol: str, now=None) -> str:
+    market = _infer_rsi_cache_market(symbol)
+    calendar_name = MARKET_CALENDAR_NAMES.get(market)
+    if not calendar_name:
+        return ""
+
+    try:
+        import pandas_market_calendars as mcal
+
+        now_bj = now or datetime.now(ZoneInfo("Asia/Shanghai"))
+        if now_bj.tzinfo is None:
+            now_bj = now_bj.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+        else:
+            now_bj = now_bj.astimezone(ZoneInfo("Asia/Shanghai"))
+
+        end_day = now_bj.date()
+        start_day = end_day - timedelta(days=14)
+        calendar = mcal.get_calendar(calendar_name)
+        schedule = calendar.schedule(start_date=start_day, end_date=end_day)
+        if schedule is None or schedule.empty:
+            return ""
+
+        now_ts = pd.Timestamp(now_bj)
+        close_ready_at = schedule["market_close"] + pd.Timedelta(hours=MARKET_CLOSE_BUFFER_HOURS)
+        ready = schedule.loc[close_ready_at <= now_ts]
+        if ready.empty:
+            return ""
+        return pd.Timestamp(ready.index[-1]).strftime("%Y-%m-%d")
+    except Exception:
+        return ""
+
+
 def _read_usable_index_cache(
     cache_file: Path,
     *,
@@ -300,6 +346,7 @@ def _read_usable_index_cache(
 
     latest_date = pd.to_datetime(cached["date"], errors="coerce").max()
     today = pd.Timestamp.today().normalize()
+    latest_complete_date = _latest_complete_rsi_trade_date(symbol)
 
     if include_realtime and _is_cn_etf_symbol(symbol):
         if pd.notna(latest_date) and latest_date.normalize() >= today - pd.Timedelta(days=RSI_CN_ETF_REALTIME_CACHE_MAX_AGE_DAYS):
@@ -326,6 +373,23 @@ def _read_usable_index_cache(
         )
         print(f"[CACHE] RSI 使用今日已检查的本地缓存: {symbol} -> {cache_file}")
         return cached.tail(days).copy()
+
+    if latest_complete_date and pd.notna(latest_date):
+        latest_complete_ts = pd.Timestamp(latest_complete_date)
+        if latest_date.normalize() >= latest_complete_ts.normalize():
+            record_market_event(
+                action="rsi_cache",
+                source="local_csv_latest_complete_close",
+                ticker=symbol,
+                outcome="cache_hit",
+                cache_hit=True,
+            )
+            print(
+                f"[CACHE] RSI 本地缓存已覆盖最新完整交易日: "
+                f"{symbol} latest={latest_date.strftime('%Y-%m-%d')} "
+                f"expected={latest_complete_date} -> {cache_file}"
+            )
+            return cached.tail(days).copy()
 
     if pd.notna(latest_date) and latest_date.normalize() >= today:
         record_market_event(

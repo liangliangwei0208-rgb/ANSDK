@@ -67,8 +67,8 @@ SAFE_TITLE_STYLE = {
 # - 想恢复某一侧默认观感，可以把对应项改回 daily_pad_inches 的值，或直接写 None。
 SAFE_CANVAS_STYLE = {
     "daily_pad_inches": 0.15,
-    "daily_top_pad_inches": 0.65,
-    "daily_bottom_pad_inches": 0.55,
+    "daily_top_pad_inches": 0.95,
+    "daily_bottom_pad_inches": 0.85,
     "daily_left_pad_inches": 0.15,
     "daily_right_pad_inches": 0.15,
 }

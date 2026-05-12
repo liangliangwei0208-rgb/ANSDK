@@ -501,6 +501,19 @@ def _is_anchor_cache_entry_fresh(item: dict) -> bool:
     if status not in ANCHOR_COMPLETE_STATUSES:
         return False
 
+    if status == "traded":
+        anchor = _normalize_trade_date_key(item.get("valuation_anchor_date"))
+        trade_date = _normalize_trade_date_key(item.get("trade_date"))
+        if anchor and trade_date != anchor:
+            return False
+
+        value_type = str(item.get("value_type", "")).strip().lower()
+        if value_type == "level" or market.endswith("_LEVEL"):
+            if _safe_float_or_none(item.get("value")) is None:
+                return False
+        elif _safe_float_or_none(item.get("return_pct")) is None:
+            return False
+
     if market == "FOREIGN_FUTURES":
         if _foreign_futures_cached_before_final_confirm(item):
             return False
@@ -917,6 +930,16 @@ def _trade_date_is_after_target(trade_date, target_date) -> bool:
     return trade_key > target_key
 
 
+def _trade_date_covers_target(trade_date, target_date) -> bool:
+    target_key = _normalize_trade_date_key(target_date)
+    if not target_key:
+        return True
+    trade_key = _normalize_trade_date_key(trade_date)
+    if not trade_key:
+        return False
+    return trade_key >= target_key
+
+
 def _kr_zero_holiday_name(date_text) -> str:
     """返回韩国市场需要按 0% 处理的休市日名称；非目标休市日返回空字符串。"""
     date_key = _normalize_trade_date_key(date_text)
@@ -1116,19 +1139,23 @@ def _last_close_cache_checked_today(item) -> bool:
     return str(item.get("postclose_checked_date", "")) == _today_local_date_key()
 
 
-def _should_use_trade_date_cache_without_refresh(item, max_age_hours=None) -> bool:
+def _should_use_trade_date_cache_without_refresh(item, max_age_hours=None, target_date=None) -> bool:
     """
     判断 last_close 缓存是否可以直接使用。
 
     策略：
     - 北京时间 07:00 前：只要缓存未超过 max_age_hours，就使用缓存；
     - 北京时间 07:00 后：必须今天已经检查过一次，才直接使用缓存；
-    - 检查时不猜测美股交易日，实际是否更新由行情源返回的 trade_date 决定。
+    - 检查时不猜测美股交易日，实际是否更新由行情源返回的 trade_date 决定；
+    - 传入 target_date 时，缓存 trade_date 必须已经覆盖目标估值日。
     """
     if not isinstance(item, dict):
         return False
 
     if not _is_cache_fresh(item.get("fetched_at"), max_age_hours=max_age_hours):
+        return False
+
+    if not _trade_date_covers_target(item.get("trade_date"), target_date):
         return False
 
     if not _is_after_us_postclose_refresh_window():
@@ -3500,7 +3527,11 @@ def get_stock_return_pct(
                     # 节假日防重复估值依赖 trade_date，缺失时必须刷新一次。
                     if not item.get("trade_date") and market in {"CN", "HK", "KR"}:
                         pass
-                    elif _should_use_trade_date_cache_without_refresh(item, max_age_hours=max_age_hours):
+                    elif _should_use_trade_date_cache_without_refresh(
+                        item,
+                        max_age_hours=max_age_hours,
+                        target_date=stale_market_estimate_date,
+                    ):
                         result = _cached_return_tuple(item)
                         cached_trade_date = _normalize_trade_date_key(item.get("trade_date", ""))
                         if market in {"CN", "HK", "KR"} and _trade_date_is_after_target(cached_trade_date, stale_market_estimate_date):
