@@ -68,6 +68,7 @@ result_df, detail_map = estimate_funds_and_save_table(
 import re
 import json
 import time
+import os
 import warnings
 import contextlib
 import requests
@@ -175,13 +176,42 @@ def _save_json_cache(filename: str, data) -> None:
     _ensure_cache_dir()
     path = CACHE_DIR / filename
 
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path = path.with_name(f"{path.name}.{os.getpid()}.{int(time.time() * 1000)}.tmp")
     data = attach_cache_info(filename, data)
 
     with tmp_path.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-    tmp_path.replace(path)
+    last_error = None
+    for attempt in range(5):
+        try:
+            tmp_path.replace(path)
+            return
+        except PermissionError as exc:
+            last_error = exc
+            time.sleep(0.2 * (attempt + 1))
+
+    try:
+        tmp_path.unlink(missing_ok=True)
+    except Exception:
+        pass
+    raise last_error if last_error is not None else PermissionError(f"缓存写入失败: {path}")
+
+
+def _save_json_cache_best_effort(filename: str, data, context: str = "") -> bool:
+    """
+    Best-effort cache persistence for paths where stale cache is still usable.
+    """
+    try:
+        _save_json_cache(filename, data)
+        return True
+    except Exception as exc:
+        context_text = f" ({context})" if context else ""
+        print(
+            f"[WARN] 缓存写入失败{context_text}，本次继续使用内存/旧缓存: {CACHE_DIR / filename}, 原因: {exc}",
+            flush=True,
+        )
+        return False
 
 
 def _is_cache_fresh(fetched_at, max_age_days=None, max_age_hours=None) -> bool:
@@ -4649,7 +4679,11 @@ def get_latest_stock_holdings_df(
                 "target_quarter_confirmed": confirmed,
                 "data_json": _df_to_cache_json(df),
             }
-            _save_json_cache(FUND_HOLDINGS_CACHE_FILE, cache)
+            _save_json_cache_best_effort(
+                FUND_HOLDINGS_CACHE_FILE,
+                cache,
+                context=f"基金持仓首次获取 {cache_key}",
+            )
             return df
         except Exception:
             raise
@@ -4667,15 +4701,25 @@ def get_latest_stock_holdings_df(
     if not in_window:
         next_window = _next_holding_disclosure_window_start(now)
         if isinstance(item, dict):
-            item.update({
+            updates = {
                 "latest_quarter_label": cached_label,
                 "latest_quarter_key": cached_key,
                 "target_quarter_key": item.get("target_quarter_key"),
                 "target_quarter_confirmed": bool(item.get("target_quarter_confirmed", False)),
                 "next_check_after": item.get("next_check_after") or next_window.isoformat(timespec="seconds"),
-            })
-            cache[cache_key] = item
-            _save_json_cache(FUND_HOLDINGS_CACHE_FILE, cache)
+            }
+            changed = False
+            for key, value in updates.items():
+                if item.get(key) != value:
+                    item[key] = value
+                    changed = True
+            if changed:
+                cache[cache_key] = item
+                _save_json_cache_best_effort(
+                    FUND_HOLDINGS_CACHE_FILE,
+                    cache,
+                    context=f"非披露窗口持仓元信息 {cache_key}",
+                )
 
         _cache_log(f"非披露窗口，使用基金持仓缓存: {cache_key}")
         return cached_df
@@ -4684,15 +4728,25 @@ def get_latest_stock_holdings_df(
     if cached_key is not None and int(cached_key) >= int(target_key):
         next_window = _next_holding_disclosure_window_start(window_end or now)
         if isinstance(item, dict):
-            item.update({
+            updates = {
                 "latest_quarter_label": cached_label,
                 "latest_quarter_key": int(cached_key),
                 "target_quarter_key": int(target_key),
                 "target_quarter_confirmed": True,
                 "next_check_after": next_window.isoformat(timespec="seconds"),
-            })
-            cache[cache_key] = item
-            _save_json_cache(FUND_HOLDINGS_CACHE_FILE, cache)
+            }
+            changed = False
+            for key, value in updates.items():
+                if item.get(key) != value:
+                    item[key] = value
+                    changed = True
+            if changed:
+                cache[cache_key] = item
+                _save_json_cache_best_effort(
+                    FUND_HOLDINGS_CACHE_FILE,
+                    cache,
+                    context=f"披露窗口持仓已确认 {cache_key}",
+                )
 
         _cache_log(f"已确认目标季度持仓，使用缓存: {cache_key} -> {cached_label}")
         return cached_df
@@ -4728,7 +4782,11 @@ def get_latest_stock_holdings_df(
                 "target_quarter_confirmed": False,
             })
             cache[cache_key] = item
-            _save_json_cache(FUND_HOLDINGS_CACHE_FILE, cache)
+            _save_json_cache_best_effort(
+                FUND_HOLDINGS_CACHE_FILE,
+                cache,
+                context=f"远程持仓旧于缓存 {cache_key}",
+            )
             return cached_df
 
         confirmed = bool(latest_key is not None and int(latest_key) >= int(target_key))
@@ -4746,7 +4804,11 @@ def get_latest_stock_holdings_df(
             "target_quarter_confirmed": confirmed,
             "data_json": _df_to_cache_json(df),
         }
-        _save_json_cache(FUND_HOLDINGS_CACHE_FILE, cache)
+        _save_json_cache_best_effort(
+            FUND_HOLDINGS_CACHE_FILE,
+            cache,
+            context=f"基金持仓试探更新 {cache_key}",
+        )
 
         if confirmed:
             _cache_log(f"已更新到目标季度持仓: {cache_key} -> {latest_label}")
@@ -4766,7 +4828,11 @@ def get_latest_stock_holdings_df(
                 "target_quarter_confirmed": False,
             })
             cache[cache_key] = item
-            _save_json_cache(FUND_HOLDINGS_CACHE_FILE, cache)
+            _save_json_cache_best_effort(
+                FUND_HOLDINGS_CACHE_FILE,
+                cache,
+                context=f"基金持仓更新失败后延后检查 {cache_key}",
+            )
 
         return cached_df
 
