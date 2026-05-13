@@ -3282,7 +3282,7 @@
     "source": "calendar_failed",
     "calendar_is_open": null,
     "error": "未配置交易日历: market=UNKNOWN",
-    "fetched_at": "2026-05-13T09:21:31+08:00"
+    "fetched_at": "2026-05-13T16:15:57+08:00"
   },
   "SECURITY:US:WDC:2026-05-12": {
     "market": "US",
@@ -3354,7 +3354,7 @@
     "source": "calendar_failed",
     "calendar_is_open": null,
     "error": "未配置交易日历: market=UNKNOWN",
-    "fetched_at": "2026-05-13T09:21:33+08:00"
+    "fetched_at": "2026-05-13T16:15:57+08:00"
   },
   "SECURITY:US:ONTO:2026-05-12": {
     "market": "US",
@@ -3390,7 +3390,7 @@
     "source": "calendar_failed",
     "calendar_is_open": null,
     "error": "未配置交易日历: market=UNKNOWN",
-    "fetched_at": "2026-05-13T09:21:34+08:00"
+    "fetched_at": "2026-05-13T16:15:57+08:00"
   },
   "SECURITY:HK:00981:2026-05-12": {
     "market": "HK",
@@ -3738,7 +3738,7 @@
     "source": "calendar_failed",
     "calendar_is_open": null,
     "error": "未配置交易日历: market=UNKNOWN",
-    "fetched_at": "2026-05-13T09:21:48+08:00"
+    "fetched_at": "2026-05-13T16:15:57+08:00"
   },
   "SECURITY:US:JBL:2026-05-12": {
     "market": "US",
@@ -3924,13 +3924,13 @@
     "market": "US",
     "ticker": "CTRA",
     "valuation_anchor_date": "2026-05-12",
-    "trade_date": "2026-05-06",
+    "trade_date": "2026-05-07",
     "return_pct": 0.0,
     "status": "stale",
-    "source": "ak_stock_us_daily_trade_date_older_than_anchor",
+    "source": "yahoo_chart_adjclose_daily_us_fallback_trade_date_older_than_anchor",
     "calendar_is_open": true,
-    "error": "trade_date=2026-05-06 与 valuation_anchor_date=2026-05-12 不一致",
-    "fetched_at": "2026-05-13T09:22:06+08:00"
+    "error": "trade_date=2026-05-07 与 valuation_anchor_date=2026-05-12 不一致",
+    "fetched_at": "2026-05-13T16:16:05+08:00"
   },
   "SECURITY:US:PSX:2026-05-12": {
     "market": "US",
