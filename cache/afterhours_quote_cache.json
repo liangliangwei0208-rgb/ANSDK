@@ -328,5 +328,38 @@
     "quote_time_bj": "2026-05-13 07:51",
     "fetched_at_bj": "2026-05-13T06:00:00+08:00",
     "error": ""
+  },
+  "US:PSX": {
+    "return_pct": 0.0855383211678662,
+    "value": null,
+    "value_type": "return_pct",
+    "status": "traded",
+    "source": "yahoo_chart_afterhours_post",
+    "trade_date": "2026-05-12",
+    "quote_time_bj": "2026-05-13 07:59",
+    "fetched_at_bj": "2026-05-13T06:00:00+08:00",
+    "error": ""
+  },
+  "US:SPY": {
+    "return_pct": -0.35035508961785977,
+    "value": null,
+    "value_type": "return_pct",
+    "status": "traded",
+    "source": "yahoo_chart_afterhours_post",
+    "trade_date": "2026-05-12",
+    "quote_time_bj": "2026-05-13 07:59",
+    "fetched_at_bj": "2026-05-13T06:00:00+08:00",
+    "error": ""
+  },
+  "US:GLD": {
+    "return_pct": -0.384022811414908,
+    "value": null,
+    "value_type": "return_pct",
+    "status": "traded",
+    "source": "yahoo_chart_afterhours_post",
+    "trade_date": "2026-05-12",
+    "quote_time_bj": "2026-05-13 07:59",
+    "fetched_at_bj": "2026-05-13T06:00:00+08:00",
+    "error": ""
   }
 }

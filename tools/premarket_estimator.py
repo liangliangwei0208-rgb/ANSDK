@@ -2812,7 +2812,7 @@ def save_premarket_image(
 ) -> None:
     output_path = Path(output_file)
     title_date = _observation_valuation_date(session, generated_at)
-    title_date_label = "估值日" if str(session.us_quote_mode).lower() == "intraday" else "观察日"
+    title_date_label = "估值日" if str(session.us_quote_mode).lower() in {"afterhours", "intraday"} else "观察日"
     generated_text = generated_at.strftime("%Y-%m-%d %H:%M:%S")
     title = f"海外基金{session.title_word}模型观察 {title_date_label}：{title_date} 生成：{generated_text}"
     title_segments = [
