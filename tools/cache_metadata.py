@@ -161,6 +161,23 @@ _INFO_BY_NAME: dict[str, dict[str, Any]] = {
             "不要在顶层内嵌 _cache_info，避免遍历逻辑把说明误认为行情记录。",
         ],
     },
+    "futu_night_return_cache.json": {
+        "purpose": "富途夜盘观察用的持仓股和基准涨跌幅结果缓存，避免 15 分钟内重复请求相同证券。",
+        "producer": "tools/futu_night_observation.py 通过 tools/futu_night_quotes.py 写入已校验估值日的涨跌幅结果。",
+        "consumers": [
+            "futu_night_fund.py",
+            "tools/futu_night_observation.py",
+            "tools/futu_night_quotes.py",
+        ],
+        "refresh_policy": "15 分钟内复用；过期、估值日不匹配、报价时间过旧或过新的记录必须重新请求。",
+        "retention_policy": "写入时删除超过 1 天的记录，并按 fetched_at_bj 只保留最新 500 条。",
+        "data_shape": "顶层是 market:ticker:target_us_date -> 行情记录的映射，例如 US:NVDA:2026-05-14。",
+        "notes": [
+            "只服务富途夜盘观察，不写入也不替代正式基金估算缓存。",
+            "缓存保存的是已计算涨跌幅结果，不保存全量 K 线或 CSV。",
+            "不要在顶层内嵌 _cache_info，避免遍历逻辑把说明误认为行情记录。",
+        ],
+    },
     "mark.jpg": {
         "purpose": "safe 公开图使用的居中 logo 水印素材。",
         "producer": "人工维护。",

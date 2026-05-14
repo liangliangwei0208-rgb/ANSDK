@@ -1,7 +1,7 @@
 """
-Manual overnight overseas fund observation entrypoint.
+Manual Futu overnight overseas fund observation entrypoint.
 
-Default window: Beijing time 10:00-16:00. Use --force for manual tests.
+Default window: Beijing time 11:30-16:30. Use --force for manual tests.
 This script does not write cache/fund_estimate_return_cache.json.
 """
 
@@ -9,20 +9,20 @@ from __future__ import annotations
 
 import argparse
 
-from tools.premarket_estimator import run_night_observation
+from tools.futu_night_observation import run_futu_night_observation
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="生成海外基金夜盘观察图")
+    parser = argparse.ArgumentParser(description="生成富途海外基金夜盘观察图")
     parser.add_argument(
         "--force",
         action="store_true",
-        help="忽略北京时间 10:00-16:00 窗口限制，强制生成夜盘观察图",
+        help="忽略北京时间 11:30-16:30 窗口限制，强制生成夜盘观察图",
     )
     parser.add_argument(
         "--now",
         default=None,
-        help="用于测试的北京时间，例如 2026-05-14T10:00:00 或 2026-05-14 10:00:00",
+        help="用于测试的北京时间，例如 2026-05-14T11:30:00 或 2026-05-14 11:30:00",
     )
     parser.add_argument(
         "--top-n",
@@ -35,7 +35,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    run_night_observation(
+    run_futu_night_observation(
         force=bool(args.force),
         current_time=args.now,
         top_n=int(args.top_n),
