@@ -17,7 +17,9 @@ import os
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from tools.configs.workflow_configs import WORKFLOW_STEPS
 from tools.paths import (
@@ -254,6 +256,96 @@ def check_workflow_config() -> list[CheckItem]:
     return items
 
 
+def check_realtime_observation_anchors() -> list[CheckItem]:
+    """用固定北京时间抽样检查实时观察窗口和估值日锚点。
+
+    这里只调用本地日期函数和 workflow 选择逻辑，不联网、不拉行情、不写缓存。
+    """
+    try:
+        from git_main import resolve_workflow_steps, select_workflow_steps_for_time
+        from tools.futu_night_quotes import futu_night_valuation_date
+        from tools.premarket_estimator import (
+            AFTERHOURS_SESSION,
+            INTRADAY_SESSION,
+            PREMARKET_SESSION,
+            _observation_valuation_date,
+            _target_afterhours_us_date,
+        )
+    except Exception as exc:
+        return [make_item("ERROR", "实时观察日期函数", f"导入失败: {exc}")]
+
+    bj_tz = ZoneInfo("Asia/Shanghai")
+    items: list[CheckItem] = []
+    try:
+        steps = resolve_workflow_steps()
+    except Exception as exc:
+        return [make_item("ERROR", "实时观察 workflow", f"解析失败: {exc}")]
+
+    workflow_cases = [
+        ("2026-05-14T09:00:00+08:00", ("afterhours_fund.py",), "09:00 盘后"),
+        ("2026-05-14T11:45:00+08:00", ("futu_night_fund.py",), "11:45 富途夜盘"),
+        ("2026-05-14T18:00:00+08:00", ("premarket_fund.py",), "18:00 盘前"),
+        ("2026-05-14T23:30:00+08:00", ("intraday_fund.py",), "23:30 盘中"),
+        ("2026-05-15T01:00:00+08:00", ("intraday_fund.py",), "次日 01:00 盘中"),
+    ]
+    for text, expected_scripts, title in workflow_cases:
+        dt = datetime.fromisoformat(text).astimezone(bj_tz)
+        selected = tuple(step.script_path.name for step in select_workflow_steps_for_time(steps, dt))
+        if selected == expected_scripts:
+            items.append(make_item("OK", f"workflow {title}", " -> ".join(selected)))
+        else:
+            items.append(
+                make_item(
+                    "ERROR",
+                    f"workflow {title}",
+                    f"期望 {expected_scripts}，实际 {selected}",
+                )
+            )
+
+    daily_dt = datetime.fromisoformat("2026-05-15T02:01:00+08:00").astimezone(bj_tz)
+    daily_selected = tuple(step.script_path.name for step in select_workflow_steps_for_time(steps, daily_dt))
+    realtime_scripts = {"afterhours_fund.py", "futu_night_fund.py", "premarket_fund.py", "intraday_fund.py"}
+    if daily_selected and not any(script in realtime_scripts for script in daily_selected):
+        items.append(make_item("OK", "workflow 02:01 每日流程", "未命中实时观察入口"))
+    else:
+        items.append(make_item("ERROR", "workflow 02:01 每日流程", f"实际 {daily_selected}"))
+
+    date_cases = [
+        (
+            "盘后主估值日",
+            _observation_valuation_date(AFTERHOURS_SESSION, "2026-05-14T09:00:00+08:00"),
+            "2026-05-14",
+        ),
+        (
+            "盘后报价日",
+            _target_afterhours_us_date("2026-05-14T09:00:00+08:00"),
+            "2026-05-13",
+        ),
+        (
+            "盘前目标美股日",
+            _observation_valuation_date(PREMARKET_SESSION, "2026-05-14T18:00:00+08:00"),
+            "2026-05-14",
+        ),
+        (
+            "盘中目标美股日",
+            _observation_valuation_date(INTRADAY_SESSION, "2026-05-15T01:00:00+08:00"),
+            "2026-05-14",
+        ),
+        (
+            "富途夜盘估值日",
+            futu_night_valuation_date("2026-05-14T11:45:00+08:00"),
+            "2026-05-14",
+        ),
+    ]
+    for title, actual, expected in date_cases:
+        if actual == expected:
+            items.append(make_item("OK", title, actual))
+        else:
+            items.append(make_item("ERROR", title, f"期望 {expected}，实际 {actual}"))
+
+    return items
+
+
 def check_git_status() -> list[CheckItem]:
     """检查 Git 当前是否有未提交改动。
 
@@ -331,6 +423,11 @@ def run_checks() -> list[CheckItem]:
             "总入口脚本清单",
             "确认 workflow_configs.py 里的脚本路径都能找到。",
             check_workflow_config,
+        ),
+        (
+            "实时观察锚点",
+            "用固定北京时间抽样检查盘后、富途夜盘、盘前、盘中和每日流程选择。",
+            check_realtime_observation_anchors,
         ),
         (
             "邮箱配置",

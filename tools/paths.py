@@ -23,7 +23,6 @@ SECURITY_RETURN_CACHE = CACHE_DIR / "security_return_cache.json"
 PREMARKET_QUOTE_CACHE = CACHE_DIR / "premarket_quote_cache.json"
 AFTERHOURS_QUOTE_CACHE = CACHE_DIR / "afterhours_quote_cache.json"
 INTRADAY_QUOTE_CACHE = CACHE_DIR / "intraday_quote_cache.json"
-NIGHT_QUOTE_CACHE = CACHE_DIR / "night_quote_cache.json"
 MARK_IMAGE = CACHE_DIR / "mark.jpg"
 
 FIRST_PIC_IMAGE = OUTPUT_DIR / "first_pic.png"
@@ -80,7 +79,6 @@ __all__ = [
     "PREMARKET_QUOTE_CACHE",
     "AFTERHOURS_QUOTE_CACHE",
     "INTRADAY_QUOTE_CACHE",
-    "NIGHT_QUOTE_CACHE",
     "MARK_IMAGE",
     "FIRST_PIC_IMAGE",
     "HAIWAI_FUND_IMAGE",

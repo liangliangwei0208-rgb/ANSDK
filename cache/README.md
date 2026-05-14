@@ -46,6 +46,17 @@
 - 注意：本文件适合内嵌 _cache_info，因为读取方只读取固定字段。
 - 注意：trade_dates 通常覆盖多年历史和当年未来已公布交易日。
 
+### `afterhours_quote_cache.json`
+- 用途：盘后观察用的实时行情短缓存，避免同一早反复运行时反复请求重复持仓股和盘后基准。
+- 生成：tools/premarket_estimator.py 在生成盘后观察图时写入可展示的实时涨跌幅或点位。
+- 读取：afterhours_fund.py, tools/premarket_estimator.py
+- 刷新：15 分钟内复用；过期后重新请求接口。失败结果不跨运行缓存。
+- 保留：写入时删除超过 1 天的记录，并按 fetched_at_bj 只保留最新 500 条。
+- 结构：顶层是 market:ticker -> 行情记录的映射，例如 US:NVDA、HK:00700、VIX_LEVEL:VIX。
+- 说明位置：本 README
+- 注意：只服务盘后观察，不写入也不替代正式基金估算缓存。
+- 注意：不要在顶层内嵌 _cache_info，避免遍历逻辑把说明误认为行情记录。
+
 ### `dot_INX_index_daily.csv`
 - 用途：RSI 和指数分析图使用的本地日线行情 CSV 缓存。
 - 生成：tools/rsi_data.py 从 AkShare、Yahoo、腾讯或新浪等数据源拉取后写入。
@@ -95,6 +106,7 @@
 - 结构：顶层包含 version、updated_at、records、benchmark_records；基金记录在 records，基准记录在 benchmark_records。
 - 说明位置：本文件内嵌 `_cache_info` + 本 README
 - 注意：只有本文件适合内嵌 _cache_info，因为真实缓存项不在顶层直接枚举。
+- 注意：正式基金缓存只由完整日线主流程写入；盘前、盘中、盘后、富途夜盘实时观察入口不写本文件。
 - 注意：VIX 这类点位记录使用 value/value_type/display_value，不参与累计收益。
 
 ### `fund_holdings_cache.json`
@@ -117,6 +129,17 @@
 - 说明位置：本 README
 - 注意：不要在顶层内嵌 _cache_info，避免遍历逻辑把说明误认为限购记录。
 
+### `intraday_quote_cache.json`
+- 用途：盘中观察用的实时行情短缓存，避免同一晚反复运行时反复请求重复持仓股和盘中基准。
+- 生成：tools/premarket_estimator.py 在生成盘中观察图时写入可展示的实时涨跌幅或点位。
+- 读取：intraday_fund.py, tools/premarket_estimator.py
+- 刷新：15 分钟内复用；过期后重新请求接口。失败结果不跨运行缓存。
+- 保留：写入时删除超过 1 天的记录，并按 fetched_at_bj 只保留最新 500 条。
+- 结构：顶层是 market:ticker -> 行情记录的映射，例如 US:NVDA、HK:00700、VIX_LEVEL:VIX。
+- 说明位置：本 README
+- 注意：只服务盘中观察，不写入也不替代正式基金估算缓存。
+- 注意：不要在顶层内嵌 _cache_info，避免遍历逻辑把说明误认为行情记录。
+
 ### `mark.jpg`
 - 用途：safe 公开图使用的居中 logo 水印素材。
 - 生成：人工维护。
@@ -127,6 +150,18 @@
 - 说明位置：本 README
 - 注意：不是行情缓存；保留在 cache/ 下是为了 GitHub Actions 和本地运行共用路径。
 
+### `night_quote_cache.json`
+- 用途：旧 HTTP/Yahoo 夜盘观察短缓存，当前已停用，仅保留文件说明以避免误删旧缓存。
+- 生成：legacy：旧 tools/premarket_estimator.py 夜盘分支；当前代码不再写入。
+- 读取：legacy only
+- 刷新：不再刷新。富途夜盘使用 futu_night_return_cache.json。
+- 保留：不由清理脚本主动删除；如需清理请人工确认后单文件处理。
+- 结构：顶层是 market:ticker -> 行情记录的映射，例如 US:QQQ、HK:00700、KR:005930。
+- 说明位置：本 README
+- 注意：legacy 缓存不再有活跃生产者或读取方。
+- 注意：保留 cache/night_quote_cache.json 文件本身，不自动删除 cache/ 下旧文件。
+- 注意：不要在顶层内嵌 _cache_info，避免遍历逻辑把说明误认为行情记录。
+
 ### `premarket_quote_cache.json`
 - 用途：盘前观察用的实时行情短缓存，避免同一晚重复运行时反复请求重复持仓股和盘前基准。
 - 生成：tools/premarket_estimator.py 在生成盘前观察图时写入可展示的实时涨跌幅或点位。
@@ -136,17 +171,6 @@
 - 结构：顶层是 market:ticker -> 行情记录的映射，例如 US:NVDA、HK:00700、VIX_LEVEL:VIX。
 - 说明位置：本 README
 - 注意：只服务盘前观察，不写入也不替代正式基金估算缓存。
-- 注意：不要在顶层内嵌 _cache_info，避免遍历逻辑把说明误认为行情记录。
-
-### `afterhours_quote_cache.json`
-- 用途：盘后观察用的实时行情短缓存，避免同一早反复运行时反复请求重复持仓股和盘后基准。
-- 生成：tools/premarket_estimator.py 在生成盘后观察图时写入可展示的实时涨跌幅或点位。
-- 读取：afterhours_fund.py, tools/premarket_estimator.py
-- 刷新：15 分钟内复用；过期后重新请求接口。失败结果不跨运行缓存。
-- 保留：写入时删除超过 1 天的记录，并按 fetched_at_bj 只保留最新 500 条。
-- 结构：顶层是 market:ticker -> 行情记录的映射，例如 US:NVDA、HK:00700、VIX_LEVEL:VIX。
-- 说明位置：本 README
-- 注意：只服务盘后观察，不写入也不替代正式基金估算缓存。
 - 注意：不要在顶层内嵌 _cache_info，避免遍历逻辑把说明误认为行情记录。
 
 ### `security_return_cache.json`

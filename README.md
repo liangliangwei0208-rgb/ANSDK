@@ -9,7 +9,7 @@ AHNS 是一个个人公开数据建模复盘项目，用于生成每日市场 RS
 - 生成纳斯达克、红利低波、上证指数 ETF 等市场 RSI 分析图；RSI CSV 优先复用最新完整交易日，国内 ETF 保留实时补点。
 - 基于公开披露持仓、指数/ETF 代理和完整日线行情，生成海外/全球基金模型估算观察表；国内基金估算业务线已停用。
 - 生成 safe 系列公开展示图：不展示基金代码，基金名称脱敏，并保留模型观察限购信息。
-- 提供独立的盘前观察图入口，适合北京时间 17:00-20:30 手动查看海外基金盘前方向，不污染正式估算缓存。
+- 提供盘前、盘中、盘后、富途夜盘四个实时观察入口，用 15 分钟短缓存降频，不污染正式估算缓存。
 - 自动识别海外基金节假日期间的累计观察场景，并在节后第 1 / 第 2 个 A 股交易日生成补更新观察图。
 - 支持按基金代码和估值日期打印完整估算拆解表，区分“股票自身涨跌幅”和“对基金贡献”。
 - 海外基准表和盘前补偿仓位均支持配置化；默认尽量使用国内更友好的新浪、东方财富和 AKShare 路径，减少对 Yahoo 的依赖。
@@ -28,6 +28,9 @@ AHNS 是一个个人公开数据建模复盘项目，用于生成每日市场 RS
 ├── check_project.py             # 运行前自检，只检查不修改
 ├── main.py                      # 主计算入口
 ├── premarket_fund.py            # 盘前观察图手动入口，不写正式估算缓存
+├── intraday_fund.py             # 盘中观察图手动入口，不写正式估算缓存
+├── afterhours_fund.py           # 盘后观察图手动入口，不写正式估算缓存
+├── futu_night_fund.py           # 富途夜盘观察图手动入口，不写正式估算缓存
 ├── fund_estimate_breakdown.py    # 基金估算完整拆解查询工具
 ├── safe_fund.py                 # safe 每日基金图
 ├── safe_holidays.py             # safe 节假日累计图
@@ -88,16 +91,22 @@ AHNS 是一个个人公开数据建模复盘项目，用于生成每日市场 RS
 & F:\anaconda\envs\py310\python.exe .\fund_estimate_breakdown.py 022184 2026-05-06 --save-txt
 ```
 
-北京时间 17:00-20:30 手动生成盘前观察图：
+单独生成实时观察图：
 
 ```powershell
 & F:\anaconda\envs\py310\python.exe .\premarket_fund.py
+& F:\anaconda\envs\py310\python.exe .\intraday_fund.py
+& F:\anaconda\envs\py310\python.exe .\afterhours_fund.py
+& F:\anaconda\envs\py310\python.exe .\futu_night_fund.py
 ```
 
 非窗口时间调试或人工预览可加 `--force`：
 
 ```powershell
 & F:\anaconda\envs\py310\python.exe .\premarket_fund.py --force
+& F:\anaconda\envs\py310\python.exe .\intraday_fund.py --force
+& F:\anaconda\envs\py310\python.exe .\afterhours_fund.py --force
+& F:\anaconda\envs\py310\python.exe .\futu_night_fund.py --force
 ```
 
 ## 常用维护入口
@@ -108,6 +117,9 @@ AHNS 是一个个人公开数据建模复盘项目，用于生成每日市场 RS
 - `tools/configs/residual_benchmark_configs.py`：维护海外股票持仓型基金的补偿仓位基准；默认纳斯达克100，`007844` 当前使用 `XOP`。
 - `tools/configs/market_benchmark_configs.py`：维护 safe 海外基金图底部基准表。这里决定展示哪些指数、ETF 或海外资产，以及使用新浪、AKShare、东方财富还是 Yahoo 路径。
 - `tools/configs/premarket_configs.py`：维护盘前观察图配置。这里定义盘前观察项、实时 ticker、默认补偿仓位基准，以及按基金代码指定的盘前补偿基准；例如 `007844`、`006679`、`018852` 当前使用 `oil_gas_ep`。
+- `tools/configs/intraday_configs.py`：维护盘中观察图配置和时间窗。
+- `tools/configs/afterhours_configs.py`：维护盘后观察图配置和时间窗。
+- `tools/configs/futu_night_configs.py`：维护富途夜盘观察图配置、Futu OpenD 连接参数、短缓存和报价校验阈值。
 - `tools/configs/safe_image_style_configs.py`：维护 safe 公开图样式。标题文字、标题和表格间距、表头底色、正文底色、表格线、行高、列宽、涨跌颜色、底部备注、水印文字和透明度都优先在这里改。
 - `tools/configs/cache_policy_configs.py`：维护缓存有效期。限购 7 天、A 股交易日历 7 天、证券/指数/基金历史保留天数、RSI ETF 实时补点新鲜度等都集中在这里。
 - `tools/configs/security_mappings.py`：维护美股 / 韩国证券映射。
@@ -117,24 +129,24 @@ AHNS 是一个个人公开数据建模复盘项目，用于生成每日市场 RS
 
 旧导入路径会尽量保留兼容，例如 `tools/fund_universe.py` 仍可导入基金池，但真实配置已移动到 `tools/configs/fund_universe_configs.py`。
 
-## 盘前观察图
+## 实时观察图
 
-`premarket_fund.py` 是独立的手动观察入口，不属于 `git_main.py` 默认工作流，也不会覆盖 `output/safe_haiwai_fund.png`。它默认只在北京时间 17:00-20:30 运行；其他时间如需测试，请使用 `--force`。
+`premarket_fund.py`、`intraday_fund.py`、`afterhours_fund.py`、`futu_night_fund.py` 都是独立观察入口；它们会读持仓、限购和 15 分钟实时短缓存，但不会写 `cache/fund_estimate_return_cache.json`，也不会覆盖正式每日图 `output/safe_haiwai_fund.png`。
 
-盘前图输出：
+| 入口 | 默认北京时间窗口 | 输出图片 | 排查报告 | 日期口径 |
+| --- | --- | --- | --- | --- |
+| `afterhours_fund.py` | 08:00-12:00 | `output/safe_haiwai_afterhours.png` | `output/afterhours_failed_holdings_latest.txt` | 主标题使用下一美股估值日，报告保留 `afterhours_quote_date` |
+| `futu_night_fund.py` | 11:30-16:30 | `output/safe_haiwai_night.png` | `output/night_failed_holdings_latest.txt` | 使用富途夜盘目标估值日 |
+| `premarket_fund.py` | 17:30-21:00 | `output/safe_haiwai_premarket.png` | `output/premarket_failed_holdings_latest.txt` | 使用目标美股交易日 |
+| `intraday_fund.py` | 22:40-次日 02:00 | `output/safe_haiwai_intraday.png` | `output/intraday_failed_holdings_latest.txt` | 使用目标美股交易日 |
 
-- `output/safe_haiwai_premarket.png`：盘前基金模型观察图。
-- `output/premarket_failed_holdings_latest.txt`：盘前持仓、补偿基准和实时源失败排查报告。
+实时观察估算与正式估算口径相近，但数据边界不同：
 
-盘前估算与正式估算口径相近，但数据边界不同：
-
-- A 股、港股、韩国市场在该时间段通常已收盘，能拿到有效收盘日线时可直接使用。
-- 美股持仓只使用严格盘前/实时数据；不得回退到上一完整日线冒充盘前涨跌幅。
-- 有效持仓贡献按“原始占净值比例 × 有效持仓增强系数 × 盘前涨跌幅”计算，增强后有效权重封顶 100%。
-- 未被有效持仓覆盖的剩余权重走配置的盘前补偿基准；默认 `nasdaq100`，油气主题基金可在 `PREMARKET_FUND_RESIDUAL_BENCHMARK_MAP` 中指定 `oil_gas_ep`。
-- 补偿基准失败时补偿贡献按 0 处理并标记为 `partial`，不阻断出图。
-
-盘前配置集中在 `tools/configs/premarket_configs.py`。图片展示名称不带 ticker；底层实时 ticker 只保留在配置和失败报告中，例如 `nasdaq100 -> QQQ`、`sp500 -> SPY`、`oil_gas_ep -> XOP`、`semiconductor -> SMH`、`gold -> GLD`。`VIX` 是点位观察项，不作为基金补偿仓位。
+- 正式主流程只使用完整日线，并且只有正式主流程写 `fund_estimate_return_cache.json`。
+- 盘前美股只接受目标美股交易日的 `pre` 时段报价；`--force` 调试时也不会把 regular/post/closed 数据当作盘前。
+- 盘中美股只接受目标美股交易日 regular 报价；盘后图主标题使用下一估值日，但报告保留实际盘后报价日。
+- 富途夜盘只保留 Futu OpenAPI 实现；需要本机安装可选依赖 `futu-api` 并启动 Futu OpenD，连接参数在 `tools/configs/futu_night_configs.py`。
+- 实时短缓存分别是 `premarket_quote_cache.json`、`intraday_quote_cache.json`、`afterhours_quote_cache.json`、`futu_night_return_cache.json`，TTL 保持 15 分钟；失败结果不跨运行缓存。
 
 ## 海外基准表配置
 
@@ -265,7 +277,10 @@ Update runtime cache [skip ci]
 - `output/shangzheng_analysis.png`
 - `output/shangzheng.png`
 - `output/haiwai_fund.png`（详细版当前在主流程中暂不输出，旧文件可能仍存在）
+- `output/safe_haiwai_afterhours.png`（盘后观察图，手动运行 `afterhours_fund.py` 生成）
+- `output/safe_haiwai_night.png`（富途夜盘观察图，手动运行 `futu_night_fund.py` 生成）
 - `output/safe_haiwai_premarket.png`（盘前观察图，手动运行 `premarket_fund.py` 生成）
+- `output/safe_haiwai_intraday.png`（盘中观察图，手动运行 `intraday_fund.py` 生成）
 - `output/safe_haiwai_fund.png`
 - `output/safe_holidays.png`
 - `output/haiwai_holidays.png`
@@ -279,6 +294,9 @@ Update runtime cache [skip ci]
 
 - `output/failed_holdings_latest.txt`：正式海外基金估算的持仓失败和请求统计报告。
 - `output/premarket_failed_holdings_latest.txt`：盘前观察图的实时持仓、补偿基准和失败源报告。
+- `output/intraday_failed_holdings_latest.txt`：盘中观察图的实时持仓、补偿基准和失败源报告。
+- `output/afterhours_failed_holdings_latest.txt`：盘后观察图的实时持仓、补偿基准和失败源报告。
+- `output/night_failed_holdings_latest.txt`：富途夜盘观察图的实时持仓、补偿基准和失败源报告。
 
 Matplotlib 表格和 RSI 图默认使用 180 DPI，科普图使用 Pillow 固定像素并做 PNG 无损压缩。
 
@@ -305,11 +323,12 @@ Matplotlib 表格和 RSI 图默认使用 180 DPI，科普图使用 Pillow 固定
 - 默认补偿基准为纳斯达克100；单基金可在 `tools/configs/residual_benchmark_configs.py` 指定其他基准。`007844` 当前使用 `XOP` 作为美国油气开采方向代理，`XOP` 是 ETF 不是指数本身。
 - `security_return_cache.json` 对锚点行情使用 `SECURITY:{market}:{ticker}:{valuation_anchor_date}` key，缓存 `traded/closed/pending/missing/stale` 状态。`traded` 和 `closed` 表示已经拿到有效信息，可以复用；`pending/missing/stale` 只用于诊断和失败报告，不再作为 fresh 命中，下一次运行会重新请求接口。
 - 旧 A 股裸收盘价来源 `ak_stock_zh_a_daily_sina_close_calc`、旧港股裸收盘价来源 `ak_stock_hk_daily_sina_close_calc` 不再视为新鲜缓存，命中后会自动刷新到更可靠口径。旧缓存文件不会被删除。
-- `fund_estimate_return_cache.json` 只写海外/全球基金记录，key 为 `overseas:{fund_code}:{valuation_anchor_date}`。写入时按数据质量覆盖：完整记录优先，失败、未确认或陈旧记录不会覆盖更好的旧记录。
+- `fund_estimate_return_cache.json` 只由完整日线主流程写海外/全球基金记录，key 为 `overseas:{fund_code}:{valuation_anchor_date}`。实时观察图不写本缓存。写入时按数据质量覆盖：完整记录优先，失败、未确认或陈旧记录不会覆盖更好的旧记录。
 - 基准表记录写在 `fund_estimate_return_cache.json` 的 `benchmark_records`；显示端会按 `market_benchmark_configs.py` 的 `enabled=True`、`display_in_holidays`、`include_in_cumulative` 过滤。VIX 只在每日海外基金图展示点位，不进入节假日累计图和区间复利。
 - `a_share_trade_calendar_cache.json` 保存 A 股交易日历，字段包含 `fetched_at`、`source`、`trade_dates`。默认 7 天有效；这是节假日判断和节后补更新判断的重要降频缓存。
 - `fund_estimate_return_cache.json` 和 `a_share_trade_calendar_cache.json` 会内嵌 `_cache_info` 说明；`security_return_cache.json`、持仓缓存、限购缓存和 CSV 不内嵌说明，统一由 `cache/README.md` 描述，避免破坏读取逻辑。
 - `*_index_daily.csv` 是 RSI/指数行情 CSV 缓存。主流程会优先读缓存，只有缓存不满足当前运行需求时才联网刷新。
+- 实时观察短缓存 TTL 保持 15 分钟：盘前、盘中、盘后分别使用独立 quote cache，富途夜盘使用 `futu_night_return_cache.json`；旧 `night_quote_cache.json` 是 legacy 缓存，不再由当前代码写入。
 - `output/failed_holdings_latest.txt` 每轮海外基金估算后覆盖写入，包含运行汇总、行情请求统计、唯一证券汇总和失败/未完成持仓明细。它是本地排查文件，不进入邮件正文。
 - 行情请求统计只保存在当前 Python 进程内，不写 JSON；用于控制台摘要和 `failed_holdings_latest.txt`。
 - 指数行情和基金估算历史保留 300 天；证券日缓存、小时桶缓存、限购缓存和 A 股交易日历按各自策略裁剪或覆盖写入，不会无限制追加。
@@ -355,7 +374,7 @@ Matplotlib 表格和 RSI 图默认使用 180 DPI，科普图使用 Pillow 固定
 全项目编译：
 
 ```powershell
-$files = @('.\git_main.py','.\check_project.py','.\main.py','.\fund_estimate_breakdown.py','.\safe_fund.py','.\safe_holidays.py','.\holidays.py','.\sum_holidays.py','.\stock_analysis.py','.\kepu\first_pic.py','.\kepu\kepu_sum_holidays.py','.\kepu\kepu_xiane.py') + (Get-ChildItem .\tools -File -Filter *.py | ForEach-Object { $_.FullName }) + (Get-ChildItem .\tools\configs -File -Filter *.py | ForEach-Object { $_.FullName }); & F:\anaconda\envs\py310\python.exe -m py_compile @files
+$files = @('.\git_main.py','.\check_project.py','.\main.py','.\premarket_fund.py','.\intraday_fund.py','.\afterhours_fund.py','.\futu_night_fund.py','.\fund_estimate_breakdown.py','.\safe_fund.py','.\safe_holidays.py','.\holidays.py','.\sum_holidays.py','.\stock_analysis.py','.\kepu\first_pic.py','.\kepu\kepu_sum_holidays.py','.\kepu\kepu_xiane.py') + (Get-ChildItem .\tools -File -Filter *.py | ForEach-Object { $_.FullName }) + (Get-ChildItem .\tools\configs -File -Filter *.py | ForEach-Object { $_.FullName }); & F:\anaconda\envs\py310\python.exe -m py_compile @files
 ```
 
 总入口预演：
@@ -372,10 +391,13 @@ $files = @('.\git_main.py','.\check_project.py','.\main.py','.\fund_estimate_bre
 & F:\anaconda\envs\py310\python.exe .\sum_holidays.py --today 2026-05-07
 ```
 
-单独生成盘前观察图：
+单独生成实时观察图：
 
 ```powershell
+& F:\anaconda\envs\py310\python.exe .\afterhours_fund.py --force
+& F:\anaconda\envs\py310\python.exe .\futu_night_fund.py --force
 & F:\anaconda\envs\py310\python.exe .\premarket_fund.py --force
+& F:\anaconda\envs\py310\python.exe .\intraday_fund.py --force
 ```
 
 检查最新失败持仓和唯一证券汇总：

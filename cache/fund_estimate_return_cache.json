@@ -16,6 +16,7 @@
     "data_shape": "顶层包含 version、updated_at、records、benchmark_records；基金记录在 records，基准记录在 benchmark_records。",
     "notes": [
       "只有本文件适合内嵌 _cache_info，因为真实缓存项不在顶层直接枚举。",
+      "正式基金缓存只由完整日线主流程写入；盘前、盘中、盘后、富途夜盘实时观察入口不写本文件。",
       "VIX 这类点位记录使用 value/value_type/display_value，不参与累计收益。"
     ]
   },

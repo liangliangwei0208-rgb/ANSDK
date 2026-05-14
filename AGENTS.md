@@ -1,8 +1,8 @@
 # AHNS 项目接手说明
 
-更新时间：2026-05-12
+更新时间：2026-05-14
 
-本项目用于生成每日市场分析图、海外/全球基金模型估算表、盘前观察图、安全版公开发布图、海外基金节假日累计观察图、节后补更新观察图，以及面向小白的科普说明图。国内基金收益预估业务线已停用，但 A 股/港股/韩国行情能力仍保留用于海外/全球基金持仓估算。正式主流程只使用完整日线；盘前观察是独立手动入口，不污染正式基金估算缓存。默认运行环境为：
+本项目用于生成每日市场分析图、海外/全球基金模型估算表、盘前/盘中/盘后/富途夜盘观察图、安全版公开发布图、海外基金节假日累计观察图、节后补更新观察图，以及面向小白的科普说明图。国内基金收益预估业务线已停用，但 A 股/港股/韩国行情能力仍保留用于海外/全球基金持仓估算。正式主流程只使用完整日线；四个实时观察入口均不写正式基金估算缓存。默认运行环境为：
 
 ```powershell
 & F:\anaconda\envs\py310\python.exe <script.py>
@@ -42,7 +42,7 @@
 & F:\anaconda\envs\py310\python.exe .\git_main.py --no-send
 ```
 
-`git_main.py` 的运行顺序由 `tools/configs/workflow_configs.py` 维护。想调整每日运行脚本、脚本顺序、失败后是否中断、某一步生成的图片是否进入邮件候选，优先改这个配置文件，不要直接改总入口主逻辑。
+`git_main.py` 的运行顺序由 `tools/configs/workflow_configs.py` 维护。想调整每日运行脚本、脚本顺序、失败后是否中断、某一步生成的图片是否进入邮件候选，优先改这个配置文件，不要直接改总入口主逻辑。实时观察窗口也在该配置文件维护，命中独占窗口时只运行对应实时观察脚本。
 
 当前默认运行顺序：
 
@@ -55,11 +55,18 @@
 7. `kepu/kepu_sum_holidays.py`
 8. `kepu/kepu_xiane.py`
 
+实时观察窗口：
+
+- 08:00-11:29：`afterhours_fund.py --force`
+- 11:30-16:30：`futu_night_fund.py --force`
+- 17:30-21:00：`premarket_fund.py --force`
+- 22:40-次日 02:00：`intraday_fund.py --force`
+
 `git_main.py` 会扫描 `output/` 中本次新生成或更新的图片，并通过 `tools/email_send.py` 发送邮件。邮件发送保留“正文内嵌图片 + 附件图片”的方式；发送前会打印图片数量、单张大小和总大小。
 
 `check_project.py` 是只读体检工具：检查 Python 环境、关键目录、`cache/mark.jpg`、核心缓存、邮箱配置、依赖导入、Git 状态和总入口配置。它不联网、不拉行情、不出图、不写缓存、不发邮件、不删除文件、不提交 Git。
 
-`premarket_fund.py` 是独立的人工入口，默认不在 `git_main.py` 流程内，也不会进入邮件候选，除非后续明确把它加入 `tools/configs/workflow_configs.py`。盘前图只用于北京时间 17:00-20:30 的观察或 `--force` 调试，不写 `cache/fund_estimate_return_cache.json`。
+`premarket_fund.py`、`intraday_fund.py`、`afterhours_fund.py`、`futu_night_fund.py` 是独立实时观察入口；在 `git_main.py` 命中对应窗口时独占运行，也可手动用 `--force` 调试。它们不写 `cache/fund_estimate_return_cache.json`。
 
 ## 关键文件
 
@@ -67,6 +74,9 @@
 - `check_project.py`：运行前自检入口，只检查不修改，用于确认环境、缓存、依赖、邮箱配置和流程配置是否基本正常。
 - `main.py`：主计算入口，生成市场 RSI 图、海外/全球基金详细估算图，并写入 `cache/fund_estimate_return_cache.json`。
 - `premarket_fund.py`：盘前观察图手动入口；生成 `output/safe_haiwai_premarket.png` 和盘前失败报告，不写正式基金估算缓存。
+- `intraday_fund.py`：盘中观察图手动入口；生成 `output/safe_haiwai_intraday.png` 和盘中失败报告，不写正式基金估算缓存。
+- `afterhours_fund.py`：盘后观察图手动入口；生成 `output/safe_haiwai_afterhours.png` 和盘后失败报告，不写正式基金估算缓存。
+- `futu_night_fund.py`：富途夜盘观察图手动入口；生成 `output/safe_haiwai_night.png` 和夜盘失败报告，不写正式基金估算缓存。
 - `fund_estimate_breakdown.py`：只读缓存的估算拆解工具；运行后可手工输入基金代码和估值日期，打印完整持仓贡献表，也支持 `--latest` 和 `--save-txt`。
 - `safe_fund.py`：只读基金估算缓存，生成安全版海外/全球每日基金估算图。
 - `safe_holidays.py`：只读缓存，生成安全版海外节假日累计观察图。
@@ -79,7 +89,8 @@
 - `tools/get_top10_holdings.py`：基金估算、持仓读取、锚点行情收益、缓存写入、基金表格绘图的核心实现。
 - `tools/fund_estimator.py`：历史兼容模块，动态转发到 `tools/get_top10_holdings.py`；新增核心逻辑优先看 `tools/get_top10_holdings.py`。
 - `tools/fund_history_io.py`：海外基金历史缓存读取、A 股交易日历文件缓存、交易日识别、区间累计和累计表格绘图。
-- `tools/premarket_estimator.py`：盘前观察图估算核心，复用基金池、持仓缓存、限购缓存、脱敏和绘图能力。
+- `tools/premarket_estimator.py`：盘前、盘中、盘后观察图估算核心，复用基金池、持仓缓存、限购缓存、短缓存、脱敏和绘图能力。
+- `tools/futu_night_observation.py` / `tools/futu_night_quotes.py`：富途夜盘观察和报价实现，使用 Futu OpenAPI，不走旧 HTTP/Yahoo 夜盘分支。
 - `tools/cache_metadata.py`：缓存说明元数据工具，负责给安全容器型 JSON 附加 `_cache_info` 并生成 `cache/README.md`。
 - `tools/paths.py`：集中维护 `cache/`、`output/` 和常用缓存/输出图片路径。
 - `tools/safe_display.py`：safe 图脱敏、居中 logo 水印和“鱼师AHNS”品牌文字水印工具。
@@ -93,12 +104,15 @@
 - `tools/configs/residual_benchmark_configs.py`：海外股票持仓型基金的补偿仓位基准配置。默认使用纳斯达克100；可按基金代码指定其他基准，例如 `007844` 使用 `XOP` 作为美国油气开采方向代理。
 - `tools/configs/market_benchmark_configs.py`：safe 海外基金图底部“基准表”的指数、ETF、海外资产和点位观察指标配置。想隐藏某个基准，把 `enabled` 改为 `False`；隐藏不会删除旧缓存，但 safe 图不会继续展示该项。当前默认启用纳斯达克100、标普500、XOP、费城半导体、现货黄金和每日图 VIX 点位。
 - `tools/configs/premarket_configs.py`：盘前观察图配置。`PREMARKET_BENCHMARK_SPECS` 定义图片展示名称和实时 ticker；`PREMARKET_DEFAULT_RESIDUAL_BENCHMARK_KEY` 定义默认补偿仓位；`PREMARKET_FUND_RESIDUAL_BENCHMARK_MAP` 按 6 位基金代码指定补偿基准，例如 `007844`、`006679`、`018852` 使用 `oil_gas_ep`。
+- `tools/configs/intraday_configs.py`：盘中观察图配置和时间窗。
+- `tools/configs/afterhours_configs.py`：盘后观察图配置和时间窗。
+- `tools/configs/futu_night_configs.py`：富途夜盘观察图配置、Futu OpenD 连接参数、短缓存和报价时间校验阈值。
 - `tools/configs/safe_image_style_configs.py`：safe 公开图的统一样式配置。标题字号/颜色/间距、图片四周留白、表头底色、正文底色、涨跌颜色、表格行距、列宽、备注字号、水印文字、logo 透明度等都从这里维护，优先不要去绘图函数里硬改。
 - `tools/configs/cache_policy_configs.py`：缓存有效期配置。限购缓存 7 天、A 股交易日历 7 天、证券/指数/基金历史保留天数、RSI ETF 实时补点新鲜度等都从这里维护。
 - `tools/configs/security_mappings.py`：美股 / 韩国证券代码映射；韩国六位数字代码需要配合名称别名匹配，避免误判 A 股。
 - `tools/configs/rsi_configs.py`：市场 RSI 图标的配置。
 - `tools/configs/market_calendar_configs.py`：市场交易日历名称、收盘缓冲、韩国节假日置零策略。
-- `tools/configs/workflow_configs.py`：`git_main.py` 每日运行流程。新增脚本时复制一项并改 `name` / `script`；想让某一步只生成不发邮件，改 `collect_images=False`。
+- `tools/configs/workflow_configs.py`：`git_main.py` 每日运行流程和实时观察窗口。新增脚本时复制一项并改 `name` / `script`；想让某一步只生成不发邮件，改 `collect_images=False`。
 - `tools/cache_metadata.py`：缓存说明维护入口。新增缓存文件时同步补充用途、生产者、消费者、刷新策略、保留策略和注意事项；不要为了说明强行改 key-map 缓存 schema。
 
 旧入口会尽量保留兼容，例如 `tools/fund_universe.py` 仍可导入 `HAIWAI_FUND_CODES`，但真实配置已移动到 `tools/configs/fund_universe_configs.py`。
@@ -142,6 +156,15 @@
 - 盘前观察图：
   - `output/safe_haiwai_premarket.png`
   - `output/premarket_failed_holdings_latest.txt`（盘前实时持仓、补偿基准和失败源报告）
+- 盘中观察图：
+  - `output/safe_haiwai_intraday.png`
+  - `output/intraday_failed_holdings_latest.txt`（盘中实时持仓、补偿基准和失败源报告）
+- 盘后观察图：
+  - `output/safe_haiwai_afterhours.png`
+  - `output/afterhours_failed_holdings_latest.txt`（盘后实时持仓、补偿基准和失败源报告）
+- 富途夜盘观察图：
+  - `output/safe_haiwai_night.png`
+  - `output/night_failed_holdings_latest.txt`（富途夜盘实时持仓、补偿基准和失败源报告）
 - safe 每日图：
   - `output/safe_haiwai_fund.png`
 - 海外节假日累计图：
@@ -205,19 +228,17 @@ safe 公开图的视觉样式已集中到 `tools/configs/safe_image_style_config
   - 节后第 2 个 A 股交易日：累计节前最后估值日之后到缓存中最新海外估值日的实际存在记录。
   - 节后第 3 个 A 股交易日起：不生成图，回归 `main.py` / `safe_fund.py` 的普通每日节奏。
 
-## 盘前观察
+## 实时观察
 
-盘前观察是独立于正式主流程的轻量入口，面向北京时间 17:00-20:30 的人工查看。它的目标是“尽可能使用当下已经有效的信息”，而不是生产正式净值估算缓存。
+盘前、盘中、盘后和富途夜盘观察是独立于正式主流程的轻量入口。它们的目标是“尽可能使用当下已经有效的信息”，而不是生产正式净值估算缓存。
 
-- 入口：`premarket_fund.py`。
-- 默认时间窗：北京时间 17:00-20:30；测试时使用 `--force`。
-- 输出：`output/safe_haiwai_premarket.png` 和 `output/premarket_failed_holdings_latest.txt`。
-- 配置：`tools/configs/premarket_configs.py`。
-- 数据边界：A 股、港股、韩国在该时间段通常已收盘，能取到有效收盘价和涨跌幅时可用；美股只用严格盘前/实时数据，不能回退到上一完整日线。
-- 估算口径：有效持仓贡献 = 原始占净值比例 × 有效持仓增强系数 × 盘前涨跌幅；增强后有效权重封顶 100%。剩余权重走该基金配置的盘前补偿基准。
-- 补偿基准：默认 `nasdaq100`；油气主题基金当前通过基金代码映射到 `oil_gas_ep`。后续新增主题基金时只改 `PREMARKET_FUND_RESIDUAL_BENCHMARK_MAP`。
-- 失败处理：持仓或补偿基准失败时记录报告；补偿基准失败时补偿贡献按 0，并标记为 `partial`，不阻断出图。
-- 缓存边界：盘前脚本可以读取持仓和限购缓存，但不能写入 `cache/fund_estimate_return_cache.json`，避免 `safe_fund.py`、`safe_holidays.py`、`sum_holidays.py` 误读盘前数据。
+- 入口：`premarket_fund.py`、`intraday_fund.py`、`afterhours_fund.py`、`futu_night_fund.py`。
+- 默认时间窗：盘后 08:00-12:00；富途夜盘 11:30-16:30；盘前 17:30-21:00；盘中 22:40-次日 02:00；测试时使用 `--force`。
+- 日期口径：盘后图主标题使用下一美股估值日，报告保留盘后报价日；盘前/盘中使用目标美股交易日；富途夜盘使用夜盘目标估值日。
+- 数据边界：盘前美股只接受目标美股交易日的 `pre` 时段报价；盘中只接受 regular 报价；盘后只接受 post 报价；富途夜盘只使用 Futu OpenAPI。
+- 富途夜盘依赖：需要本地安装可选 `futu-api` 并启动 Futu OpenD；连接参数在 `tools/configs/futu_night_configs.py`。
+- 估算口径：有效持仓贡献 = 原始占净值比例 × 有效持仓增强系数 × 实时涨跌幅；增强后有效权重封顶 100%。剩余权重走该入口配置的补偿基准。
+- 缓存边界：实时观察可以读取持仓、限购和 15 分钟实时短缓存，但不能写入 `cache/fund_estimate_return_cache.json`。
 
 ## 计算口径摘要
 
@@ -258,7 +279,8 @@ safe 公开图的视觉样式已集中到 `tools/configs/safe_image_style_config
   - 指数行情缓存保留 300 天。
   - 无法解析日期的缓存项保留，避免误删有效缓存。
 - `fund_estimate_return_cache.json`：
-  - 只缓存海外/全球基金，不再缓存国内基金。
+  - 只由完整日线主流程缓存海外/全球基金，不再缓存国内基金。
+  - 盘前、盘中、盘后、富途夜盘实时观察入口均不写本文件。
   - 基金 key 为 `overseas:{fund_code}:{valuation_anchor_date}`，同时保留兼容字段 `valuation_date`。
   - 基准表结果写入 `benchmark_records`，由 `tools/configs/market_benchmark_configs.py` 的 `enabled=True` 项主动更新；显示端会过滤禁用基准和不适用场景的旧记录。收益率基准使用 `return_pct`，VIX 点位使用 `value_type="level"`、`value/display_value`，并保持 `return_pct=null`。
   - 覆盖规则由数据质量驱动，不再使用 15:30 冻结逻辑。
@@ -281,6 +303,10 @@ safe 公开图的视觉样式已集中到 `tools/configs/safe_image_style_config
 - `fund_purchase_limit_cache.json`：
   - 按基金代码保存申购限额信息，默认 7 天有效。
   - 刷新时覆盖同一基金代码记录，不做无限历史留存。
+- 实时观察短缓存：
+  - `premarket_quote_cache.json`、`intraday_quote_cache.json`、`afterhours_quote_cache.json` 均由 `tools/premarket_estimator.py` 写入，TTL 15 分钟，失败结果不跨运行缓存。
+  - `futu_night_return_cache.json` 由富途夜盘模块写入，TTL 15 分钟，并按目标夜盘估值日和报价时间重新校验。
+  - `night_quote_cache.json` 是旧 HTTP/Yahoo 夜盘 legacy 缓存，当前代码不再写入；保留旧文件，不自动清理 `cache/`。
 - `output/failed_holdings_latest.txt`：
   - 每轮海外基金估算后覆盖写入，不追加历史。
   - 包含运行汇总、行情请求统计、唯一证券汇总、失败/未完成持仓明细。
@@ -288,6 +314,9 @@ safe 公开图的视觉样式已集中到 `tools/configs/safe_image_style_config
 - `output/premarket_failed_holdings_latest.txt`：
   - 每轮盘前观察后覆盖写入，不追加历史。
   - 用于区分盘前实时持仓失败、补偿基准失败和底层数据源错误。
+- `output/intraday_failed_holdings_latest.txt`、`output/afterhours_failed_holdings_latest.txt`、`output/night_failed_holdings_latest.txt`：
+  - 每轮对应实时观察后覆盖写入，不追加历史。
+  - 用于区分实时持仓失败、补偿基准失败和底层数据源错误。
 - 行情请求统计：
   - 只存在当前 Python 进程内，不写 JSON。
   - 控制台只打印摘要，完整明细写入 `output/failed_holdings_latest.txt`。
@@ -313,7 +342,7 @@ safe 公开图的视觉样式已集中到 `tools/configs/safe_image_style_config
 全项目编译：
 
 ```powershell
-$files = @('.\git_main.py','.\check_project.py','.\main.py','.\fund_estimate_breakdown.py','.\safe_fund.py','.\safe_holidays.py','.\holidays.py','.\sum_holidays.py','.\stock_analysis.py','.\kepu\first_pic.py','.\kepu\kepu_sum_holidays.py','.\kepu\kepu_xiane.py') + (Get-ChildItem .\tools -File -Filter *.py | ForEach-Object { $_.FullName }) + (Get-ChildItem .\tools\configs -File -Filter *.py | ForEach-Object { $_.FullName }); & F:\anaconda\envs\py310\python.exe -m py_compile @files
+$files = @('.\git_main.py','.\check_project.py','.\main.py','.\premarket_fund.py','.\intraday_fund.py','.\afterhours_fund.py','.\futu_night_fund.py','.\fund_estimate_breakdown.py','.\safe_fund.py','.\safe_holidays.py','.\holidays.py','.\sum_holidays.py','.\stock_analysis.py','.\kepu\first_pic.py','.\kepu\kepu_sum_holidays.py','.\kepu\kepu_xiane.py') + (Get-ChildItem .\tools -File -Filter *.py | ForEach-Object { $_.FullName }) + (Get-ChildItem .\tools\configs -File -Filter *.py | ForEach-Object { $_.FullName }); & F:\anaconda\envs\py310\python.exe -m py_compile @files
 ```
 
 运行前自检：
@@ -332,7 +361,10 @@ $files = @('.\git_main.py','.\check_project.py','.\main.py','.\fund_estimate_bre
 
 ```powershell
 & F:\anaconda\envs\py310\python.exe .\main.py
+& F:\anaconda\envs\py310\python.exe .\afterhours_fund.py --force
+& F:\anaconda\envs\py310\python.exe .\futu_night_fund.py --force
 & F:\anaconda\envs\py310\python.exe .\premarket_fund.py --force
+& F:\anaconda\envs\py310\python.exe .\intraday_fund.py --force
 & F:\anaconda\envs\py310\python.exe .\kepu\first_pic.py
 & F:\anaconda\envs\py310\python.exe .\safe_fund.py
 & F:\anaconda\envs\py310\python.exe .\safe_holidays.py
@@ -397,10 +429,10 @@ print("RSI缓存样本", df.tail(1).to_string(index=False))
 ## 当前状态摘要
 
 - 总控入口是 `git_main.py`，流程由 `tools/configs/workflow_configs.py` 管理；`main.py` 保持主计算职责，不作为日常配置入口。
-- 海外/全球基金估算已经统一为 `valuation_anchor_date` 锚点口径；正式主流程只用完整日线，盘前观察由 `premarket_fund.py` 独立承担。
+- 海外/全球基金估算已经统一为 `valuation_anchor_date` 锚点口径；正式主流程只用完整日线，盘前/盘中/盘后/富途夜盘实时观察由独立入口承担。
 - safe 公开图、水印、标题、颜色、表格行距和列宽已集中到 `tools/configs/safe_image_style_configs.py`。
-- 海外基准表和补偿仓位均配置化；正式图看 `market_benchmark_configs.py` 与 `residual_benchmark_configs.py`，盘前图看 `premarket_configs.py`。
+- 海外基准表和补偿仓位均配置化；正式图看 `market_benchmark_configs.py` 与 `residual_benchmark_configs.py`，实时观察图看 `premarket_configs.py`、`intraday_configs.py`、`afterhours_configs.py`、`futu_night_configs.py`。
 - 缓存覆盖已经改为数据质量驱动：`complete/traded/closed` 优先，失败、未确认或陈旧记录不会覆盖更好的旧记录；`pending/missing/stale` 不再阻止下次请求。
 - 缓存说明由 `tools/cache_metadata.py` 维护；安全 JSON 内嵌 `_cache_info`，其他缓存通过 `cache/README.md` 说明。
-- 行情失败报告分为正式估算的 `output/failed_holdings_latest.txt` 和盘前观察的 `output/premarket_failed_holdings_latest.txt`。
+- 行情失败报告分为正式估算的 `output/failed_holdings_latest.txt` 和四个实时观察失败报告。
 - GitHub Actions 会定时或手动运行并自动回推缓存；本地提交前要注意先同步远端缓存，避免 JSON 合并损坏。

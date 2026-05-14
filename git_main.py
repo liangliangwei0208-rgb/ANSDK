@@ -6,9 +6,8 @@ AHNS 项目总控入口：
 2. 运行 main.py 生成市场和基金估算图；
 3. 运行 safe_fund.py、safe_holidays.py、holidays.py、sum_holidays.py 生成公开展示图；
 4. 运行 kepu 科普脚本，按日期条件生成节后说明图和每周限额图；
-5. 北京时间 17:30-21:00 只运行 premarket_fund.py 盘前观察；
-6. 北京时间 22:40-次日 02:00 只运行 intraday_fund.py 盘中观察；
-7. 收集本次新建或更新的图片并发送邮件。
+5. 按 workflow_configs.py 中的 run_window_bj 切换实时观察流程；
+6. 收集本次新建或更新的图片并发送邮件。
 
 本地默认使用 tools.email_send.py 中的邮箱配置；GitHub Actions 可通过
 QQ_EMAIL_ACCOUNT、QQ_EMAIL_AUTH_CODE、QQ_EMAIL_RECEIVER 环境变量覆盖。
@@ -33,12 +32,6 @@ from tools.paths import OUTPUT_DIR, PROJECT_ROOT, relative_path_str
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 BJ_TZ = ZoneInfo("Asia/Shanghai")
-PREMARKET_SCRIPT_NAME = "premarket_fund.py"
-INTRADAY_SCRIPT_NAME = "intraday_fund.py"
-PREMARKET_START_TIME_BJ = datetime_time(17, 30)
-PREMARKET_END_TIME_BJ = datetime_time(21, 0)
-INTRADAY_START_TIME_BJ = datetime_time(22, 40)
-INTRADAY_END_TIME_BJ = datetime_time(2, 0)
 RISK_NOTE = (
     "个人公开数据建模复盘，不收费、不荐基、不带单、不拉群，不构成任何投资建议。\n"
     "非实时净值，最终以基金公司公告为准。"
@@ -64,6 +57,22 @@ class WorkflowStep:
     script_path: Path
     required: bool
     collect_images: bool
+    args: tuple[str, ...]
+    run_window_start_bj: datetime_time | None = None
+    run_window_end_bj: datetime_time | None = None
+    exclusive_window: bool = False
+
+    @property
+    def has_run_window(self) -> bool:
+        return self.run_window_start_bj is not None and self.run_window_end_bj is not None
+
+    @property
+    def run_window_text(self) -> str:
+        if not self.has_run_window:
+            return "全天"
+        assert self.run_window_start_bj is not None
+        assert self.run_window_end_bj is not None
+        return f"{self.run_window_start_bj.strftime('%H:%M')}-{self.run_window_end_bj.strftime('%H:%M')}"
 
 
 @dataclass
@@ -151,6 +160,27 @@ def changed_images(
     return sorted(changed, key=lambda item: (after[item].mtime_ns, str(item).lower()))
 
 
+def parse_hhmm_time(value: object) -> datetime_time:
+    text = str(value or "").strip()
+    try:
+        hour_text, minute_text = text.split(":", 1)
+        hour = int(hour_text)
+        minute = int(minute_text)
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            raise ValueError
+        return datetime_time(hour, minute)
+    except Exception as exc:
+        raise ValueError(f"运行窗口时间格式必须是 HH:MM，当前为: {text!r}") from exc
+
+
+def parse_run_window_bj(value: object) -> tuple[datetime_time | None, datetime_time | None]:
+    if value in (None, "", False):
+        return None, None
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        raise ValueError(f"run_window_bj 必须是 (start, end)，当前为: {value!r}")
+    return parse_hhmm_time(value[0]), parse_hhmm_time(value[1])
+
+
 def resolve_workflow_steps() -> list[WorkflowStep]:
     """把配置文件里的脚本清单转换成可运行步骤。
 
@@ -177,6 +207,13 @@ def resolve_workflow_steps() -> list[WorkflowStep]:
         resolved_script = PROJECT_ROOT / script_path
         required = bool(item.get("required", True))
         collect_images = bool(item.get("collect_images", True))
+        args_raw = item.get("args") or []
+        if isinstance(args_raw, str):
+            args = (args_raw,)
+        else:
+            args = tuple(str(arg) for arg in args_raw)
+        run_window_start_bj, run_window_end_bj = parse_run_window_bj(item.get("run_window_bj"))
+        exclusive_window = bool(item.get("exclusive_window", False))
 
         if not resolved_script.exists():
             missing.append(f"{name}({script_text})")
@@ -188,6 +225,10 @@ def resolve_workflow_steps() -> list[WorkflowStep]:
                 script_path=resolved_script,
                 required=required,
                 collect_images=collect_images,
+                args=args,
+                run_window_start_bj=run_window_start_bj,
+                run_window_end_bj=run_window_end_bj,
+                exclusive_window=exclusive_window,
             )
         )
 
@@ -209,39 +250,28 @@ def time_in_closed_window(current: datetime_time, start: datetime_time, end: dat
     return current >= start or current <= end
 
 
-def _single_step_index(steps: list[WorkflowStep], script_name: str) -> int:
-    indexes = [
-        index
-        for index, step in enumerate(steps)
-        if step.script_path.name.lower() == script_name.lower()
-    ]
-    if not indexes:
-        raise ValueError(f"workflow_configs.py 缺少 {script_name} 步骤")
-    if len(indexes) > 1:
-        raise ValueError(f"workflow_configs.py 里存在多个 {script_name} 步骤")
-    return indexes[0]
-
-
 def select_workflow_steps_for_time(
     steps: list[WorkflowStep],
     current_time: datetime | None = None,
 ) -> list[WorkflowStep]:
-    """按北京时间窗口切换每日、盘前、盘中流程。"""
+    """按配置中的北京时间窗口切换每日流程和实时观察流程。"""
     now_bj = coerce_beijing_datetime(current_time or datetime.now(BJ_TZ))
     current = now_bj.time().replace(microsecond=0)
-    premarket_index = _single_step_index(steps, PREMARKET_SCRIPT_NAME)
-    intraday_index = _single_step_index(steps, INTRADAY_SCRIPT_NAME)
+    matching_window_steps = [
+        step
+        for step in steps
+        if step.has_run_window
+        and step.run_window_start_bj is not None
+        and step.run_window_end_bj is not None
+        and time_in_closed_window(current, step.run_window_start_bj, step.run_window_end_bj)
+    ]
+    exclusive_steps = [step for step in matching_window_steps if step.exclusive_window]
+    if exclusive_steps:
+        return exclusive_steps
+    return [step for step in steps if not step.has_run_window or step in matching_window_steps]
 
-    if time_in_closed_window(current, INTRADAY_START_TIME_BJ, INTRADAY_END_TIME_BJ):
-        return [steps[intraday_index]]
 
-    if time_in_closed_window(current, PREMARKET_START_TIME_BJ, PREMARKET_END_TIME_BJ):
-        return [steps[premarket_index]]
-
-    return steps[: min(premarket_index, intraday_index)]
-
-
-def stream_script_output(script_path: Path) -> int:
+def stream_script_output(script_path: Path, args: tuple[str, ...] = ()) -> int:
     """运行单个脚本，并把子脚本输出实时打印出来。
 
     这里继续使用当前 Python 解释器，也就是你运行 git_main.py 时用的那个环境。
@@ -253,7 +283,7 @@ def stream_script_output(script_path: Path) -> int:
     env["PYTHONUTF8"] = "1"
     env["PYTHONUNBUFFERED"] = "1"
 
-    command = [sys.executable, str(script_path)]
+    command = [sys.executable, str(script_path), *args]
     process = subprocess.Popen(
         command,
         cwd=str(PROJECT_ROOT),
@@ -280,10 +310,11 @@ def run_script(step: WorkflowStep) -> ScriptResult:
     sum_holidays.py。只要退出码是 0，即使没有检测到新图片，也表示这一步正常完成。
     """
     script_path = step.script_path
-    log(f"开始运行 {step.name}: {relative_text(script_path)}")
+    arg_text = "" if not step.args else " " + " ".join(step.args)
+    log(f"开始运行 {step.name}: {relative_text(script_path)}{arg_text}")
     before = snapshot_images()
     started = time.perf_counter()
-    return_code = stream_script_output(script_path)
+    return_code = stream_script_output(script_path, step.args)
     elapsed = time.perf_counter() - started
     after = snapshot_images()
     images = changed_images(before, after)
@@ -399,22 +430,20 @@ def main(argv: list[str] | None = None) -> int:
 
     steps = resolve_workflow_steps()
     now_bj = datetime.now(BJ_TZ)
+    all_steps = steps
     steps = select_workflow_steps_for_time(steps, current_time=now_bj)
     log(f"当前北京时间: {now_bj.strftime('%Y-%m-%d %H:%M:%S')}")
-    current_time_bj = now_bj.time().replace(microsecond=0)
-    premarket_window = f"{PREMARKET_START_TIME_BJ.strftime('%H:%M')}-{PREMARKET_END_TIME_BJ.strftime('%H:%M')}"
-    intraday_window = f"{INTRADAY_START_TIME_BJ.strftime('%H:%M')}-{INTRADAY_END_TIME_BJ.strftime('%H:%M')}"
-    log(
-        "流程切换规则: "
-        f"{premarket_window} 只运行盘前观察；"
-        f"{intraday_window} 只运行盘中观察；其他时间运行每日流程"
-    )
-    if time_in_closed_window(current_time_bj, INTRADAY_START_TIME_BJ, INTRADAY_END_TIME_BJ):
-        log("当前命中盘中观察窗口")
-    elif time_in_closed_window(current_time_bj, PREMARKET_START_TIME_BJ, PREMARKET_END_TIME_BJ):
-        log("当前命中盘前观察窗口")
+    configured_windows = [
+        f"{step.name}:{step.run_window_text}"
+        for step in all_steps
+        if step.has_run_window
+    ]
+    if configured_windows:
+        log("配置化实时观察窗口: " + "；".join(configured_windows))
+    if steps and all(step.has_run_window for step in steps):
+        log("当前命中实时观察窗口")
     else:
-        log("当前命中每日流程窗口")
+        log("当前运行每日流程/非窗口步骤")
     log("实际运行顺序: " + " -> ".join(step.name for step in steps))
 
     results: list[ScriptResult] = []

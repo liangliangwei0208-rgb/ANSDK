@@ -38,6 +38,7 @@ _INFO_BY_NAME: dict[str, dict[str, Any]] = {
         "data_shape": "顶层包含 version、updated_at、records、benchmark_records；基金记录在 records，基准记录在 benchmark_records。",
         "notes": [
             "只有本文件适合内嵌 _cache_info，因为真实缓存项不在顶层直接枚举。",
+            "正式基金缓存只由完整日线主流程写入；盘前、盘中、盘后、富途夜盘实时观察入口不写本文件。",
             "VIX 这类点位记录使用 value/value_type/display_value，不参与累计收益。",
         ],
     },
@@ -146,18 +147,17 @@ _INFO_BY_NAME: dict[str, dict[str, Any]] = {
         ],
     },
     "night_quote_cache.json": {
-        "purpose": "夜盘观察用的实时行情短缓存，避免同一上午重复运行时反复请求重复持仓股和夜盘基准。",
-        "producer": "tools/premarket_estimator.py 在生成夜盘观察图时写入可展示且日期锚点合格的实时涨跌幅或点位。",
+        "purpose": "旧 HTTP/Yahoo 夜盘观察短缓存，当前已停用，仅保留文件说明以避免误删旧缓存。",
+        "producer": "legacy：旧 tools/premarket_estimator.py 夜盘分支；当前代码不再写入。",
         "consumers": [
-            "night_fund.py",
-            "tools/premarket_estimator.py",
+            "legacy only",
         ],
-        "refresh_policy": "15 分钟内复用；过期后重新请求接口。失败、置零和日期不匹配结果不跨运行缓存。",
-        "retention_policy": "写入时删除超过 1 天的记录，并按 fetched_at_bj 只保留最新 500 条。",
+        "refresh_policy": "不再刷新。富途夜盘使用 futu_night_return_cache.json。",
+        "retention_policy": "不由清理脚本主动删除；如需清理请人工确认后单文件处理。",
         "data_shape": "顶层是 market:ticker -> 行情记录的映射，例如 US:QQQ、HK:00700、KR:005930。",
         "notes": [
-            "只服务夜盘观察，不写入也不替代正式基金估算缓存。",
-            "夜盘读取侧会重新校验 trade_date/source/quote_time，避免过旧或过新的实时数据污染估算。",
+            "legacy 缓存不再有活跃生产者或读取方。",
+            "保留 cache/night_quote_cache.json 文件本身，不自动删除 cache/ 下旧文件。",
             "不要在顶层内嵌 _cache_info，避免遍历逻辑把说明误认为行情记录。",
         ],
     },
