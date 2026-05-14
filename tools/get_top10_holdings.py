@@ -1529,12 +1529,14 @@ def get_fund_purchase_limit(
     timeout=8,
     cache_days=FUND_PURCHASE_LIMIT_CACHE_DAYS,
     cache_enabled=True,
+    force_refresh=False,
 ) -> str:
     """
     获取基金限购金额，带文件缓存。
 
     设计：
         - 默认 7 天更新一次；
+        - force_refresh=True 时显式提前刷新，成功后 fetched_at 顺延下一次自动刷新时间；
         - GitHub Actions 中配合提交 cache/*.json 回仓库，可跨任务复用；
         - 如果更新失败且旧缓存存在，优先使用旧缓存。
     """
@@ -1546,7 +1548,7 @@ def get_fund_purchase_limit(
     cache = _load_json_cache(FUND_PURCHASE_LIMIT_CACHE_FILE, default={})
     item = cache.get(fund_code)
 
-    if item and _is_cache_fresh(item.get("fetched_at"), max_age_days=cache_days):
+    if item and not force_refresh and _is_cache_fresh(item.get("fetched_at"), max_age_days=cache_days):
         value = item.get("value", "未知")
         _FUND_LIMIT_CACHE[fund_code] = value
         _cache_log(f"使用限购缓存: {fund_code} -> {value}")
@@ -1555,7 +1557,11 @@ def get_fund_purchase_limit(
     old_value = item.get("value") if isinstance(item, dict) else None
 
     try:
-        _cache_log(f"重新获取限购信息: {fund_code}")
+        if force_refresh:
+            _FUND_LIMIT_CACHE.pop(fund_code, None)
+            _cache_log(f"手动刷新限购信息: {fund_code}")
+        else:
+            _cache_log(f"重新获取限购信息: {fund_code}")
         value = get_fund_purchase_limit_uncached(
             fund_code=fund_code,
             timeout=timeout,
@@ -1564,10 +1570,11 @@ def get_fund_purchase_limit(
         # 如果本次只得到“未知”，但旧缓存有明确值，则保留旧值，避免网络异常污染缓存。
         if value == "未知" and old_value and old_value != "未知":
             print(f"[WARN] 限购新结果为未知，继续沿用旧缓存: {fund_code} -> {old_value}", flush=True)
+            _FUND_LIMIT_CACHE[fund_code] = old_value
             return old_value
 
         cache[fund_code] = {
-            "fetched_at": datetime.now().isoformat(timespec="seconds"),
+            "fetched_at": datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(timespec="seconds"),
             "value": value,
         }
         _save_json_cache(FUND_PURCHASE_LIMIT_CACHE_FILE, cache)
@@ -1577,11 +1584,71 @@ def get_fund_purchase_limit(
 
     except Exception as e:
         if old_value:
+            _FUND_LIMIT_CACHE[fund_code] = old_value
             print(f"[WARN] 限购更新失败，使用旧缓存: {fund_code}, 原因: {e}", flush=True)
             return old_value
 
         print(f"[WARN] 限购获取失败且无缓存: {fund_code}, 原因: {e}", flush=True)
         return "未知"
+
+
+def get_purchase_limit_cache_refresh_summary(
+    *,
+    cache_days: int = FUND_PURCHASE_LIMIT_CACHE_DAYS,
+    cache: dict | None = None,
+) -> dict[str, object]:
+    """
+    汇总限购缓存预计下一次自动刷新时间。
+
+    预计刷新时间只由 fetched_at + cache_days 决定；手动刷新成功后 fetched_at
+    会更新，因此下一次自动刷新自然顺延。
+    """
+    if cache is None:
+        cache = _load_json_cache(FUND_PURCHASE_LIMIT_CACHE_FILE, default={})
+    if not isinstance(cache, dict):
+        cache = {}
+
+    next_refresh_times = []
+    for item in cache.values():
+        if not isinstance(item, dict):
+            continue
+        fetched_dt = _parse_cache_fetched_at(item.get("fetched_at"))
+        if fetched_dt is None:
+            continue
+        next_refresh_times.append(fetched_dt + timedelta(days=cache_days))
+
+    next_refresh_times.sort()
+    return {
+        "cache_count": len(cache) if isinstance(cache, dict) else 0,
+        "dated_cache_count": len(next_refresh_times),
+        "cache_days": cache_days,
+        "earliest_next_refresh_at": next_refresh_times[0] if next_refresh_times else None,
+        "latest_next_refresh_at": next_refresh_times[-1] if next_refresh_times else None,
+    }
+
+
+def _format_purchase_limit_refresh_time(value) -> str:
+    if value is None:
+        return "未知"
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    return str(value)
+
+
+def print_purchase_limit_cache_refresh_summary(
+    *,
+    cache_days: int = FUND_PURCHASE_LIMIT_CACHE_DAYS,
+    prefix: str = "限购缓存预计下次自动刷新",
+) -> dict[str, object]:
+    summary = get_purchase_limit_cache_refresh_summary(cache_days=cache_days)
+    _cache_log(
+        f"{prefix}: 共{summary['cache_count']}条"
+        f"（可计算{summary['dated_cache_count']}条）, "
+        f"最早={_format_purchase_limit_refresh_time(summary['earliest_next_refresh_at'])}, "
+        f"最晚={_format_purchase_limit_refresh_time(summary['latest_next_refresh_at'])}, "
+        f"策略={summary['cache_days']}天"
+    )
+    return summary
 
 
 # 字段排序、股票代码识别和通用工具。
@@ -5927,6 +5994,9 @@ def estimate_funds(
         cols.append("估算方式")
 
     result_df = result_df[cols]
+
+    if include_purchase_limit and cache_enabled:
+        print_purchase_limit_cache_refresh_summary(cache_days=purchase_limit_cache_days)
 
     return result_df, detail_map
 

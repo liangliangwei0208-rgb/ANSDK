@@ -98,6 +98,7 @@ from tools.safe_display import apply_safe_public_watermarks, mask_fund_name
 
 BJ_TZ = ZoneInfo("Asia/Shanghai")
 US_EASTERN_TZ = ZoneInfo("America/New_York")
+AFTERHOURS_POST_CLOSE_GRACE_MINUTES = 5
 PREMARKET_START_BJ = time(PREMARKET_START_HOUR_BJ, PREMARKET_START_MINUTE_BJ)
 PREMARKET_END_BJ = time(PREMARKET_END_HOUR_BJ, PREMARKET_END_MINUTE_BJ)
 AFTERHOURS_START_BJ = time(AFTERHOURS_START_HOUR_BJ, AFTERHOURS_START_MINUTE_BJ)
@@ -828,8 +829,8 @@ def _yahoo_afterhours_return_pct(
     timeout: int = 8,
 ) -> dict[str, Any]:
     """
-    Fetch the latest regular/post-market price and compare it with the previous
-    regular close of that same US trading session.
+    Fetch the latest post-market price and compare it with the same day's
+    16:00 regular-session close.
 
     During Beijing late afternoon, Yahoo may already expose the next US
     pre-market. This function deliberately skips pre-market timestamps so the
@@ -886,7 +887,6 @@ def _yahoo_afterhours_return_pct(
             accepted_points: list[tuple[int, float, datetime, str]] = []
             regular_start = time(9, 30)
             regular_end = time(16, 0)
-            post_end = time(20, 0)
 
             for ts, price in zip(timestamps, closes):
                 price_f = _safe_float(price)
@@ -898,7 +898,10 @@ def _yahoo_afterhours_return_pct(
                 local_time = dt_local.time().replace(second=0, microsecond=0)
                 if regular_start <= local_time <= regular_end:
                     regular_points.append((ts_int, price_f, dt_local))
-                elif regular_end < local_time <= post_end:
+                elif _classify_us_eastern_quote_session(
+                    dt_local,
+                    post_close_grace_minutes=AFTERHOURS_POST_CLOSE_GRACE_MINUTES,
+                ) == "post":
                     accepted_points.append((ts_int, price_f, dt_local, "post"))
 
             if not accepted_points:
@@ -912,25 +915,19 @@ def _yahoo_afterhours_return_pct(
                 raise RuntimeError(
                     f"Yahoo afterhours 数据不是目标美股日期: {symbol_norm}, trade_date={latest_dt_local.date().isoformat()}, target={target_us_date}"
                 )
-            previous_close = None
+            regular_close = None
             for _, price_f, dt_local in reversed(regular_points):
-                if dt_local.date() < latest_dt_local.date():
-                    previous_close = price_f
+                if dt_local.date() == latest_dt_local.date():
+                    regular_close = price_f
                     break
-            if previous_close is None:
-                previous_close = _safe_float(
-                    meta.get("regularMarketPreviousClose")
-                    or meta.get("chartPreviousClose")
-                    or meta.get("previousClose")
-                )
-            if previous_close is None or previous_close <= 0:
-                raise RuntimeError(f"Yahoo afterhours 缺少有效昨收价: {symbol_norm}")
+            if regular_close is None or regular_close <= 0:
+                raise RuntimeError(f"Yahoo afterhours 缺少同日常规收盘价: {symbol_norm}")
 
-            return_pct = (float(latest_price) / float(previous_close) - 1.0) * 100.0
+            return_pct = (float(latest_price) / float(regular_close) - 1.0) * 100.0
             quote_time_bj = datetime.fromtimestamp(latest_ts, tz=BJ_TZ).strftime("%Y-%m-%d %H:%M")
             return _require_afterhours_target_trade_date({
                 "return_pct": float(return_pct),
-                "source": f"yahoo_chart_afterhours_{phase}",
+                "source": f"yahoo_chart_afterhours_pure_{phase}",
                 "quote_time_bj": quote_time_bj,
                 "trade_date": latest_dt_local.date().isoformat(),
                 "status": "traded",
@@ -1046,13 +1043,18 @@ def _parse_us_eastern_quote_time(value: Any, *, default_year: int | None = None)
     return None
 
 
-def _classify_us_eastern_quote_session(dt_local: datetime) -> str:
-    local_time = dt_local.astimezone(US_EASTERN_TZ).time().replace(second=0, microsecond=0)
+def _classify_us_eastern_quote_session(dt_local: datetime, *, post_close_grace_minutes: int = 0) -> str:
+    local_dt = dt_local.astimezone(US_EASTERN_TZ).replace(second=0, microsecond=0)
+    local_time = local_dt.time()
     if time(4, 0) <= local_time < time(9, 30):
         return "pre"
     if time(9, 30) <= local_time <= time(16, 0):
         return "regular"
-    if time(16, 0) < local_time <= time(20, 0):
+    post_start = datetime.combine(local_dt.date(), time(16, 0), tzinfo=US_EASTERN_TZ)
+    post_end = datetime.combine(local_dt.date(), time(20, 0), tzinfo=US_EASTERN_TZ) + timedelta(
+        minutes=max(0, int(post_close_grace_minutes or 0))
+    )
+    if post_start < local_dt <= post_end:
         return "post"
     return "off"
 
@@ -1088,6 +1090,8 @@ def _require_afterhours_live_or_post_source(item: dict[str, Any], *, symbol: str
     quote_source = str(item.get("source") or "").strip().lower()
     if "post" not in quote_source:
         raise RuntimeError(f"{source} 拒绝使用非 post 行情作为盘后数据: {symbol}, source={quote_source}")
+    if "pure_post" not in quote_source:
+        raise RuntimeError(f"{source} 拒绝使用旧口径盘后缓存: {symbol}, source={quote_source}")
     if "afterhours_closed_daily" in quote_source:
         raise RuntimeError(f"{source} 拒绝使用日线收盘兜底作为盘后数据: {symbol}, source={quote_source}")
     if "closed_daily" in quote_source:
@@ -1191,7 +1195,10 @@ def _sina_us_afterhours_return_pct(
     quote_dt_local = _parse_us_eastern_quote_time(values[24])
     if quote_dt_local is None:
         raise RuntimeError(f"新浪美股盘后无法解析扩展交易时间: {symbol_norm}, {values[24] if len(values) > 24 else ''}")
-    phase = _classify_us_eastern_quote_session(quote_dt_local)
+    phase = _classify_us_eastern_quote_session(
+        quote_dt_local,
+        post_close_grace_minutes=AFTERHOURS_POST_CLOSE_GRACE_MINUTES,
+    )
     if phase == "pre":
         raise RuntimeError(f"afterhours rejected premarket quote: sina {symbol_norm} {values[24]}")
     if phase != "post":
@@ -1202,20 +1209,18 @@ def _sina_us_afterhours_return_pct(
         )
 
     extended_price = _safe_float(values[21] if len(values) > 21 else None)
+    extended_pct = _safe_float(values[22] if len(values) > 22 else None)
     regular_close = _safe_float(values[1] if len(values) > 1 else None)
-    regular_pct = _safe_float(values[2] if len(values) > 2 else None)
-    previous_close = _safe_float(values[26] if len(values) > 26 else None)
-    if previous_close is None and regular_close is not None and regular_pct is not None:
-        denominator = 1.0 + regular_pct / 100.0
-        if denominator:
-            previous_close = regular_close / denominator
-    if extended_price is None or previous_close in (None, 0):
-        raise RuntimeError(f"新浪美股盘后无法解析含盘后整日涨跌幅: {symbol_norm}")
-    pct = (extended_price / float(previous_close) - 1.0) * 100.0
+    if extended_pct is not None:
+        pct = float(extended_pct)
+    elif extended_price is not None and regular_close not in (None, 0):
+        pct = (extended_price / float(regular_close) - 1.0) * 100.0
+    else:
+        raise RuntimeError(f"新浪美股盘后无法解析纯盘后涨跌幅: {symbol_norm}")
 
     return _require_afterhours_target_trade_date({
         "return_pct": float(pct),
-        "source": "sina_us_afterhours_post_http",
+        "source": "sina_us_afterhours_pure_post_http",
         "status": "traded",
         "trade_date": quote_dt_local.date().isoformat(),
         "quote_time_bj": _us_quote_time_bj_text(quote_dt_local),
@@ -1229,7 +1234,7 @@ def _nasdaq_afterhours_return_pct(
     timeout: int = 6,
 ) -> dict[str, Any]:
     """
-    Use Nasdaq's quote info API for regular/post or latest closed regular data.
+    Use Nasdaq's quote info API as a post-market fallback.
     """
     symbol_norm = str(symbol or "").strip().upper()
     if not symbol_norm:
@@ -1268,7 +1273,14 @@ def _nasdaq_afterhours_return_pct(
             timestamp = str(primary.get("lastTradeTimestamp") or "")
             is_closed_regular = bool(re.search(r"\bClosed at\b", timestamp, flags=re.IGNORECASE))
             quote_dt_local = _parse_us_eastern_quote_time(timestamp, default_year=default_year)
-            phase = _classify_us_eastern_quote_session(quote_dt_local) if quote_dt_local is not None else ""
+            phase = (
+                _classify_us_eastern_quote_session(
+                    quote_dt_local,
+                    post_close_grace_minutes=AFTERHOURS_POST_CLOSE_GRACE_MINUTES,
+                )
+                if quote_dt_local is not None
+                else ""
+            )
             if phase == "pre":
                 errors.append(f"{assetclass}: afterhours rejected premarket quote: nasdaq {symbol_norm} {timestamp}")
                 continue
@@ -1283,20 +1295,14 @@ def _nasdaq_afterhours_return_pct(
 
             latest = _safe_float(primary.get("lastSalePrice"))
             regular_close = _safe_float(secondary.get("lastSalePrice"))
-            regular_pct = _safe_float(secondary.get("percentageChange"))
-            previous_close = None
-            if regular_close is not None and regular_pct is not None:
-                denominator = 1.0 + regular_pct / 100.0
-                if denominator:
-                    previous_close = regular_close / denominator
-            if latest is None or previous_close in (None, 0):
-                errors.append(f"{assetclass}: Nasdaq 盘后缺少可计算含盘后整日涨跌幅的数据")
+            if latest is None or regular_close in (None, 0):
+                errors.append(f"{assetclass}: Nasdaq 盘后缺少可计算纯盘后涨跌幅的数据")
                 continue
-            pct = (latest / float(previous_close) - 1.0) * 100.0
+            pct = (latest / float(regular_close) - 1.0) * 100.0
 
             return _require_afterhours_target_trade_date({
                 "return_pct": float(pct),
-                "source": f"nasdaq_api_afterhours_{assetclass}_post",
+                "source": f"nasdaq_api_afterhours_{assetclass}_pure_post",
                 "status": "traded",
                 "trade_date": quote_dt_local.date().isoformat() if quote_dt_local is not None else now_bj().date().isoformat(),
                 "quote_time_bj": _us_quote_time_bj_text(quote_dt_local) or timestamp,
