@@ -32,6 +32,7 @@ from tools.paths import OUTPUT_DIR, PROJECT_ROOT, relative_path_str
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 BJ_TZ = ZoneInfo("Asia/Shanghai")
+SCRIPT_OUTPUT_TAIL_LINES = 80
 RISK_NOTE = (
     "个人公开数据建模复盘，不收费、不荐基、不带单、不拉群，不构成任何投资建议。\n"
     "非实时净值，最终以基金公司公告为准。"
@@ -49,8 +50,8 @@ class WorkflowStep:
     """总入口中的一个脚本步骤。
 
     这里把配置文件里的普通字典转换成结构化对象，是为了让后面的代码更清楚：
-    `name` 用来给人看，`script_path` 用来真正运行，`required` 和
-    `collect_images` 分别控制失败处理和邮件收图。
+    `name` 用来给人看，`script_path` 用来真正运行，`required` 用于
+    标记必要性日志，`collect_images` 控制邮件收图。
     """
 
     name: str
@@ -84,6 +85,8 @@ class ScriptResult:
     elapsed_seconds: float
     changed_images: list[Path]
     collect_images: bool
+    output_tail: list[str]
+    error_message: str = ""
 
     @property
     def success(self) -> bool:
@@ -271,7 +274,7 @@ def select_workflow_steps_for_time(
     return [step for step in steps if not step.has_run_window or step in matching_window_steps]
 
 
-def stream_script_output(script_path: Path, args: tuple[str, ...] = ()) -> int:
+def stream_script_output(script_path: Path, args: tuple[str, ...] = ()) -> tuple[int, list[str]]:
     """运行单个脚本，并把子脚本输出实时打印出来。
 
     这里继续使用当前 Python 解释器，也就是你运行 git_main.py 时用的那个环境。
@@ -296,11 +299,17 @@ def stream_script_output(script_path: Path, args: tuple[str, ...] = ()) -> int:
         bufsize=1,
     )
 
+    output_tail: list[str] = []
+
     assert process.stdout is not None
     for line in process.stdout:
-        print(f"[{script_path.name}] {line.rstrip()}", flush=True)
+        text = line.rstrip()
+        print(f"[{script_path.name}] {text}", flush=True)
+        output_tail.append(text)
+        if len(output_tail) > SCRIPT_OUTPUT_TAIL_LINES:
+            output_tail = output_tail[-SCRIPT_OUTPUT_TAIL_LINES:]
 
-    return process.wait()
+    return process.wait(), output_tail
 
 
 def run_script(step: WorkflowStep) -> ScriptResult:
@@ -314,7 +323,14 @@ def run_script(step: WorkflowStep) -> ScriptResult:
     log(f"开始运行 {step.name}: {relative_text(script_path)}{arg_text}")
     before = snapshot_images()
     started = time.perf_counter()
-    return_code = stream_script_output(script_path, step.args)
+    output_tail: list[str] = []
+    error_message = ""
+    try:
+        return_code, output_tail = stream_script_output(script_path, step.args)
+    except Exception as exc:
+        return_code = -1
+        error_message = repr(exc)
+        log(f"{step.name} 启动或运行监控异常: {error_message}")
     elapsed = time.perf_counter() - started
     after = snapshot_images()
     images = changed_images(before, after)
@@ -344,6 +360,8 @@ def run_script(step: WorkflowStep) -> ScriptResult:
         elapsed_seconds=elapsed,
         changed_images=images,
         collect_images=step.collect_images,
+        output_tail=output_tail,
+        error_message=error_message,
     )
 
 
@@ -394,6 +412,10 @@ def build_email_text(
             f"生成或更新图片 {len(result.changed_images)} 张{collect_note}"
         )
 
+    failure_logs = format_failure_logs(results)
+    if failure_logs:
+        lines.extend(["", *failure_logs])
+
     lines.extend(["", "【本次发送图片】"])
     if images:
         for index, image in enumerate(images, start=1):
@@ -403,6 +425,37 @@ def build_email_text(
 
     lines.extend(["", "【提示】", RISK_NOTE])
     return "\n".join(lines)
+
+
+def format_failure_logs(results: Iterable[ScriptResult]) -> list[str]:
+    failed_results = [result for result in results if not result.success]
+    if not failed_results:
+        return []
+
+    lines = ["【失败日志】"]
+    for result in failed_results:
+        lines.append(
+            f"- {result.step_name}({result.script_name}) 退出码 {result.return_code}，"
+            f"耗时 {format_duration(result.elapsed_seconds)}"
+        )
+        if result.error_message:
+            lines.append(f"  监控异常：{result.error_message}")
+        if result.output_tail:
+            lines.append(f"  最近 {len(result.output_tail)} 行输出：")
+            for item in result.output_tail:
+                lines.append(f"    {item}")
+        else:
+            lines.append("  无子脚本输出。")
+    return lines
+
+
+def print_failure_logs(results: Iterable[ScriptResult]) -> None:
+    failure_logs = format_failure_logs(results)
+    if not failure_logs:
+        log("全部脚本运行成功，未记录失败日志")
+        return
+
+    print("\n" + "\n".join(failure_logs), flush=True)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -451,17 +504,13 @@ def main(argv: list[str] | None = None) -> int:
         result = run_script(step)
         results.append(result)
 
-        if not result.success and step.required:
-            raise RuntimeError(
-                f"{step.name} 是 required=True 的必要步骤，已中断总流程。"
-                "如果你确认这一步可以失败后继续，请在 workflow_configs.py 里改 required=False。"
-            )
-
         if not result.success:
-            log(f"[WARN] {step.name} 是非必要步骤，失败后继续运行后续步骤")
+            required_note = "必要步骤" if step.required else "非必要步骤"
+            log(f"[WARN] {step.name} 是{required_note}，失败已记录，继续运行后续步骤")
 
     images = unique_images(results)
     finished_at = datetime.now(BJ_TZ)
+    has_failures = any(not result.success for result in results)
     email_text = build_email_text(
         started_at=started_at,
         finished_at=finished_at,
@@ -480,12 +529,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if not images:
         log("本次没有可发送图片，跳过邮件发送")
-        return 0
+        print_failure_logs(results)
+        return 1 if has_failures else 0
 
     if args.no_send:
         log("预演模式结束，未发送邮件")
         print("\n" + email_text, flush=True)
-        return 0
+        print_failure_logs(results)
+        return 1 if has_failures else 0
 
     subject = f"AHNS 每日市场图自动生成 - {finished_at.strftime('%Y-%m-%d %H:%M')}"
     log(f"开始发送邮件：图片 {len(images)} 张，总大小 {format_file_size(image_total_size)}")
@@ -505,10 +556,12 @@ def main(argv: list[str] | None = None) -> int:
             "邮件发送失败：如果 SMTP 登录正常，常见原因是邮件体积较大、网络较慢或服务端中途断开。"
             "当前仍按“正文内嵌 + 附件”发送，可稍后重试。"
         )
+        print_failure_logs(results)
         raise
 
     log(f"邮件发送完成，耗时 {format_duration(time.perf_counter() - email_started)}")
-    return 0
+    print_failure_logs(results)
+    return 1 if has_failures else 0
 
 
 if __name__ == "__main__":

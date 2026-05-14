@@ -42,7 +42,7 @@
 & F:\anaconda\envs\py310\python.exe .\git_main.py --no-send
 ```
 
-`git_main.py` 的运行顺序由 `tools/configs/workflow_configs.py` 维护。想调整每日运行脚本、脚本顺序、失败后是否中断、某一步生成的图片是否进入邮件候选，优先改这个配置文件，不要直接改总入口主逻辑。实时观察窗口也在该配置文件维护，命中独占窗口时只运行对应实时观察脚本。
+`git_main.py` 的运行顺序由 `tools/configs/workflow_configs.py` 维护。想调整每日运行脚本、脚本顺序、必要性标记、某一步生成的图片是否进入邮件候选，优先改这个配置文件，不要直接改总入口主逻辑。实时观察窗口也在该配置文件维护，命中独占窗口时只运行对应实时观察脚本。子脚本失败不会中断总流程，会在运行结束后统一打印失败日志。
 
 当前默认运行顺序：
 
@@ -70,14 +70,14 @@
 
 ## 关键文件
 
-- `git_main.py`：项目总控入口，顺序运行全部脚本，收集本次图片并发送邮件；支持 `--no-send` 和 `--receiver`。
+- `git_main.py`：项目总控入口，顺序运行全部脚本，收集本次图片并发送邮件；子脚本失败会继续运行后续步骤，并在最后汇总错误输出；支持 `--no-send` 和 `--receiver`。
 - `check_project.py`：运行前自检入口，只检查不修改，用于确认环境、缓存、依赖、邮箱配置和流程配置是否基本正常。
 - `main.py`：主计算入口，生成市场 RSI 图、海外/全球基金详细估算图，并写入 `cache/fund_estimate_return_cache.json`。
 - `premarket_fund.py`：盘前观察图手动入口；生成 `output/safe_haiwai_premarket.png` 和盘前失败报告，不写正式基金估算缓存。
 - `intraday_fund.py`：盘中观察图手动入口；生成 `output/safe_haiwai_intraday.png` 和盘中失败报告，不写正式基金估算缓存。
 - `afterhours_fund.py`：盘后观察图手动入口；生成 `output/safe_haiwai_afterhours.png` 和盘后失败报告，不写正式基金估算缓存。
 - `futu_night_fund.py`：富途夜盘观察图手动入口；生成 `output/safe_haiwai_night.png` 和夜盘失败报告，不写正式基金估算缓存。
-- `fund_estimate_breakdown.py`：只读缓存的估算拆解工具；运行后可手工输入基金代码和估值日期，打印完整持仓贡献表，也支持 `--latest` 和 `--save-txt`。
+- `fund_estimate_breakdown.py`：只读缓存的估算拆解工具；运行后可手工输入基金代码、正式估值日期或实时观察类型，打印完整持仓贡献表；支持 `--latest`、`--save-txt` 和 `--observation 盘中`。
 - `safe_fund.py`：只读基金估算缓存，生成安全版海外/全球每日基金估算图。
 - `safe_holidays.py`：只读缓存，生成安全版海外节假日累计观察图。
 - `holidays.py`：只读缓存，生成详细版海外节假日累计观察图。
@@ -112,7 +112,7 @@
 - `tools/configs/security_mappings.py`：美股 / 韩国证券代码映射；韩国六位数字代码需要配合名称别名匹配，避免误判 A 股。
 - `tools/configs/rsi_configs.py`：市场 RSI 图标的配置。
 - `tools/configs/market_calendar_configs.py`：市场交易日历名称、收盘缓冲、韩国节假日置零策略。
-- `tools/configs/workflow_configs.py`：`git_main.py` 每日运行流程和实时观察窗口。新增脚本时复制一项并改 `name` / `script`；想让某一步只生成不发邮件，改 `collect_images=False`。
+- `tools/configs/workflow_configs.py`：`git_main.py` 每日运行流程和实时观察窗口。新增脚本时复制一项并改 `name` / `script`；想让某一步只生成不发邮件，改 `collect_images=False`；`required` 只做必要性日志标记，不再控制中断。
 - `tools/cache_metadata.py`：缓存说明维护入口。新增缓存文件时同步补充用途、生产者、消费者、刷新策略、保留策略和注意事项；不要为了说明强行改 key-map 缓存 schema。
 
 旧入口会尽量保留兼容，例如 `tools/fund_universe.py` 仍可导入 `HAIWAI_FUND_CODES`，但真实配置已移动到 `tools/configs/fund_universe_configs.py`。
@@ -369,6 +369,7 @@ $files = @('.\git_main.py','.\check_project.py','.\main.py','.\premarket_fund.py
 & F:\anaconda\envs\py310\python.exe .\safe_fund.py
 & F:\anaconda\envs\py310\python.exe .\safe_holidays.py
 & F:\anaconda\envs\py310\python.exe .\fund_estimate_breakdown.py
+& F:\anaconda\envs\py310\python.exe .\fund_estimate_breakdown.py 012922 --observation 盘中
 ```
 
 检查最新失败持仓和唯一证券汇总：

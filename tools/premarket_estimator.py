@@ -130,8 +130,8 @@ INTRADAY_FOOTER_LABELS = {
     "sp500": "标普500（盘中实时）",
     "oil_gas_ep": "油气开采（盘中实时）",
     "semiconductor": "费城半导体（盘中实时）",
-    "gold": "现货黄金（盘中实时）",
-    "vix": "VIX恐慌指数（盘中实时）",
+    "gold": "现货黄金（实时）",
+    "vix": "VIX恐慌指数（实时）",
 }
 PREMARKET_QUOTE_CACHE_FIELDS = (
     "return_pct",

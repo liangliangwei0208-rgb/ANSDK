@@ -76,7 +76,7 @@ AHNS 是一个个人公开数据建模复盘项目，用于生成每日市场 RS
 & F:\anaconda\envs\py310\python.exe .\git_main.py --receiver someone@example.com
 ```
 
-查看某只基金在指定估值日的完整估算拆解：
+查看某只基金在指定估值日或实时观察中的完整估算拆解：
 
 ```powershell
 & F:\anaconda\envs\py310\python.exe .\fund_estimate_breakdown.py
@@ -89,6 +89,8 @@ AHNS 是一个个人公开数据建模复盘项目，用于生成每日市场 RS
 & F:\anaconda\envs\py310\python.exe .\fund_estimate_breakdown.py 022184 2026-05-06
 & F:\anaconda\envs\py310\python.exe .\fund_estimate_breakdown.py 022184 --latest
 & F:\anaconda\envs\py310\python.exe .\fund_estimate_breakdown.py 022184 2026-05-06 --save-txt
+& F:\anaconda\envs\py310\python.exe .\fund_estimate_breakdown.py 012922 --observation 盘中
+& F:\anaconda\envs\py310\python.exe .\fund_estimate_breakdown.py 022184 盘后
 ```
 
 单独生成实时观察图：
@@ -111,7 +113,7 @@ AHNS 是一个个人公开数据建模复盘项目，用于生成每日市场 RS
 
 ## 常用维护入口
 
-- `tools/configs/workflow_configs.py`：维护 `git_main.py` 每天运行哪些脚本、运行顺序、失败后是否中断、图片是否进入邮件候选。
+- `tools/configs/workflow_configs.py`：维护 `git_main.py` 每天运行哪些脚本、运行顺序、必要性标记、图片是否进入邮件候选。子脚本失败不会中断总流程，会在运行结束后统一打印失败日志。
 - `tools/configs/fund_universe_configs.py`：维护海外/全球基金池；新增基金代码优先改这里，基金代码请写 6 位字符串。
 - `tools/configs/fund_proxy_configs.py`：维护代理型基金和海外有效披露持仓增强系数。
 - `tools/configs/residual_benchmark_configs.py`：维护海外股票持仓型基金的补偿仓位基准；默认纳斯达克100，`007844` 当前使用 `XOP`。
@@ -319,7 +321,7 @@ Matplotlib 表格和 RSI 图默认使用 180 DPI，科普图使用 Pillow 固定
   - 如果只剩 raw close 且单日绝对涨跌异常大，代码会继续尝试其他源；仍无法确认时宁愿标记为 missing/stale，也不写入明显可疑的大涨大跌。
   - 韩国当前 pykrx 已优先读取“涨跌率”列；指数、期货和黄金没有股票除权/拆股语义，仍用完整日线 close-to-close。
 - RSI 行情优先使用本地 `cache/*_index_daily.csv`。如果缓存已经覆盖最新完整交易日，非实时指数会直接复用；国内 ETF 因为需要盘中观察，在 `include_realtime=True` 且历史缓存足够新时只补实时点，不重拉整段历史。
-- 普通持仓型海外基金使用“有效持仓增强 + 配置基准补偿仓位”口径，`fund_estimate_breakdown.py` 可打印逐项明细。
+- 普通持仓型海外基金使用“有效持仓增强 + 配置基准补偿仓位”口径，`fund_estimate_breakdown.py` 可打印正式完整日线和盘前/盘中/盘后/富途夜盘观察的逐项明细。
 - 默认补偿基准为纳斯达克100；单基金可在 `tools/configs/residual_benchmark_configs.py` 指定其他基准。`007844` 当前使用 `XOP` 作为美国油气开采方向代理，`XOP` 是 ETF 不是指数本身。
 - `security_return_cache.json` 对锚点行情使用 `SECURITY:{market}:{ticker}:{valuation_anchor_date}` key，缓存 `traded/closed/pending/missing/stale` 状态。`traded` 和 `closed` 表示已经拿到有效信息，可以复用；`pending/missing/stale` 只用于诊断和失败报告，不再作为 fresh 命中，下一次运行会重新请求接口。
 - 旧 A 股裸收盘价来源 `ak_stock_zh_a_daily_sina_close_calc`、旧港股裸收盘价来源 `ak_stock_hk_daily_sina_close_calc` 不再视为新鲜缓存，命中后会自动刷新到更可靠口径。旧缓存文件不会被删除。
@@ -341,6 +343,8 @@ Matplotlib 表格和 RSI 图默认使用 180 DPI，科普图使用 Pillow 固定
 ```powershell
 & F:\anaconda\envs\py310\python.exe .\fund_estimate_breakdown.py
 ```
+
+交互模式会询问基金代码和查询类型；查询类型可输入 `正式`、`盘前`、`盘中`、`盘中实时`、`盘后`、`夜盘`。实时观察拆解只读对应短缓存和最新报告，不联网、不出图、不写正式基金缓存。
 
 建议重点看这些字段：
 
@@ -410,6 +414,7 @@ Get-Content .\output\failed_holdings_latest.txt -Encoding UTF8 -TotalCount 120
 
 ```powershell
 & F:\anaconda\envs\py310\python.exe .\fund_estimate_breakdown.py 017731 --latest
+& F:\anaconda\envs\py310\python.exe .\fund_estimate_breakdown.py 012922 --observation 盘中
 ```
 
 抽样检查行情口径和缓存降频：

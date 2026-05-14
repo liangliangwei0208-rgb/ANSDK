@@ -7,6 +7,7 @@ Usage:
     python fund_estimate_breakdown.py 022184
     python fund_estimate_breakdown.py 022184 --latest
     python fund_estimate_breakdown.py 022184 2026-05-06 --save-txt
+    python fund_estimate_breakdown.py 012922 --observation 盘中
 
 The script only reads existing cache files. It does not fetch market data,
 write cache, or regenerate images.
@@ -18,7 +19,9 @@ import argparse
 import contextlib
 import io
 import json
+import math
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -27,15 +30,67 @@ ROOT = Path(__file__).resolve().parent
 FUND_ESTIMATE_CACHE = ROOT / "cache" / "fund_estimate_return_cache.json"
 FUND_HOLDINGS_CACHE = ROOT / "cache" / "fund_holdings_cache.json"
 SECURITY_RETURN_CACHE = ROOT / "cache" / "security_return_cache.json"
+PREMARKET_QUOTE_CACHE = ROOT / "cache" / "premarket_quote_cache.json"
+INTRADAY_QUOTE_CACHE = ROOT / "cache" / "intraday_quote_cache.json"
+AFTERHOURS_QUOTE_CACHE = ROOT / "cache" / "afterhours_quote_cache.json"
+FUTU_NIGHT_RETURN_CACHE = ROOT / "cache" / "futu_night_return_cache.json"
+PREMARKET_REPORT = ROOT / "output" / "premarket_failed_holdings_latest.txt"
+INTRADAY_REPORT = ROOT / "output" / "intraday_failed_holdings_latest.txt"
+AFTERHOURS_REPORT = ROOT / "output" / "afterhours_failed_holdings_latest.txt"
+NIGHT_REPORT = ROOT / "output" / "night_failed_holdings_latest.txt"
 
 GOOD_STATUSES = {"traded", "closed"}
 BAD_STATUSES = {"pending", "missing", "stale", "failed"}
+OBSERVATION_GOOD_STATUSES = {"traded", "closed"}
+OVERSEAS_VALID_HOLDING_BOOST = 1.15
+
+
+@dataclass(frozen=True)
+class ObservationMode:
+    key: str
+    label: str
+    quote_cache: Path
+    report_file: Path
+    futu_night: bool = False
+
+
+OBSERVATION_MODES = {
+    "premarket": ObservationMode("premarket", "盘前", PREMARKET_QUOTE_CACHE, PREMARKET_REPORT),
+    "intraday": ObservationMode("intraday", "盘中", INTRADAY_QUOTE_CACHE, INTRADAY_REPORT),
+    "afterhours": ObservationMode("afterhours", "盘后", AFTERHOURS_QUOTE_CACHE, AFTERHOURS_REPORT),
+    "night": ObservationMode("night", "富途夜盘", FUTU_NIGHT_RETURN_CACHE, NIGHT_REPORT, futu_night=True),
+}
+
+MODE_ALIASES = {
+    "盘前": "premarket",
+    "pre": "premarket",
+    "premarket": "premarket",
+    "盘中": "intraday",
+    "盘中实时": "intraday",
+    "intraday": "intraday",
+    "realtime": "intraday",
+    "盘后": "afterhours",
+    "afterhours": "afterhours",
+    "post": "afterhours",
+    "夜盘": "night",
+    "富途夜盘": "night",
+    "futu": "night",
+    "futu_night": "night",
+    "night": "night",
+}
 
 
 def load_json(path: Path, default: Any) -> Any:
     if not path.exists():
         return default
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def relative_path(path: Path) -> str:
+    try:
+        return path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(path)
 
 
 def safe_float(value: Any, default: float = 0.0) -> float:
@@ -47,11 +102,37 @@ def safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def safe_float_or_none(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip().replace("%", "").replace(",", "")
+            if not value:
+                return None
+        out = float(value)
+        if not math.isfinite(out):
+            return None
+        return out
+    except Exception:
+        return None
+
+
 def normalize_date(value: Any) -> str:
     text = str(value or "").strip()
     if not text:
         return ""
     return text[:10]
+
+
+def normalize_observation_mode(value: Any) -> ObservationMode | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    key = MODE_ALIASES.get(text) or MODE_ALIASES.get(text.lower())
+    if key is None:
+        return None
+    return OBSERVATION_MODES[key]
 
 
 def normalize_fund_code(value: Any) -> str:
@@ -75,6 +156,14 @@ def normalize_ticker(market: str, ticker: Any) -> str:
 
 def fmt_pct(value: Any, digits: int = 2, signed: bool = False) -> str:
     number = safe_float(value)
+    sign = "+" if signed and number >= 0 else ""
+    return f"{sign}{number:.{digits}f}%"
+
+
+def fmt_optional_pct(value: Any, digits: int = 4, signed: bool = True) -> str:
+    number = safe_float_or_none(value)
+    if number is None:
+        return ""
     sign = "+" if signed and number >= 0 else ""
     return f"{sign}{number:.{digits}f}%"
 
@@ -160,6 +249,19 @@ def load_holdings(fund_code: str) -> list[dict[str, Any]]:
     if not isinstance(data, list) or not data:
         raise SystemExit(f"持仓缓存为空: {fund_code}:top10")
     return [x for x in data if isinstance(x, dict)]
+
+
+def load_holdings_record(fund_code: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    cache = load_json(FUND_HOLDINGS_CACHE, {})
+    item = cache.get(f"{fund_code}:top10")
+    if not isinstance(item, dict):
+        raise SystemExit(f"未找到持仓缓存: {fund_code}:top10。请先运行 main.py 或对应观察脚本。")
+
+    raw = item.get("data_json", "[]")
+    data = json.loads(raw) if isinstance(raw, str) else raw
+    if not isinstance(data, list) or not data:
+        raise SystemExit(f"持仓缓存为空: {fund_code}:top10")
+    return item, [x for x in data if isinstance(x, dict)]
 
 
 def get_security_record(cache: dict[str, Any], market: str, ticker: Any, anchor_date: str) -> dict[str, Any]:
@@ -325,6 +427,249 @@ def print_breakdown(fund_code: str, anchor_date: str) -> None:
             print(f"- {row['name']} {row['market']}:{row['ticker']} {row['status']} {msg}")
 
 
+def parse_observation_report(report_file: Path) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
+    if not report_file.exists():
+        return {}, {}
+    lines = report_file.read_text(encoding="utf-8", errors="replace").splitlines()
+    meta: dict[str, str] = {}
+    summaries: dict[str, dict[str, str]] = {}
+    headers: list[str] = []
+    in_summary = False
+    for line in lines:
+        if line.strip() == "基金汇总":
+            in_summary = True
+            continue
+        if not in_summary:
+            if ":" in line and "\t" not in line:
+                key, value = line.split(":", 1)
+                meta[key.strip()] = value.strip()
+            continue
+        if not headers:
+            if line.startswith("fund_code"):
+                headers = line.split("\t")
+            continue
+        if not line.strip() or not line[0].isdigit():
+            break
+        values = line.split("\t")
+        row = dict(zip(headers, values))
+        code = row.get("fund_code", "")
+        if code:
+            summaries[code] = row
+    return meta, summaries
+
+
+def observation_quote_for_holding(
+    quote_cache: dict[str, Any],
+    *,
+    mode: ObservationMode,
+    market: str,
+    ticker: str,
+    valuation_date: str,
+) -> dict[str, Any]:
+    if mode.futu_night:
+        keys = [f"{market}:{ticker}:{valuation_date}", f"{market}:{ticker}"]
+    else:
+        keys = [f"{market}:{ticker}"]
+
+    for key in keys:
+        item = quote_cache.get(key)
+        if isinstance(item, dict):
+            return item
+
+    if mode.key == "afterhours" and market in {"CN", "HK", "KR"}:
+        return {
+            "return_pct": 0.0,
+            "source": "afterhours_non_us_zero",
+            "status": "zeroed",
+            "trade_date": valuation_date,
+            "quote_time_bj": "",
+            "fetched_at_bj": "",
+            "error": "盘后非美持仓置零，不计入有效持仓权重",
+        }
+
+    return {
+        "return_pct": None,
+        "source": "cache_missing",
+        "status": "missing",
+        "trade_date": "",
+        "quote_time_bj": "",
+        "fetched_at_bj": "",
+        "error": f"短缓存未找到 {market}:{ticker}",
+    }
+
+
+def observation_residual_quote(
+    quote_cache: dict[str, Any],
+    *,
+    mode: ObservationMode,
+    summary: dict[str, str],
+    valuation_date: str,
+) -> dict[str, Any]:
+    ticker = str(summary.get("residual_ticker") or "QQQ").strip().upper()
+    keys = [f"US:{ticker}:{valuation_date}", f"US:{ticker}"] if mode.futu_night else [f"US:{ticker}"]
+    for key in keys:
+        item = quote_cache.get(key)
+        if isinstance(item, dict):
+            return item
+    return {
+        "return_pct": safe_float_or_none(summary.get("residual_return_pct")),
+        "source": "report_summary",
+        "status": "summary",
+        "trade_date": valuation_date,
+        "quote_time_bj": "",
+        "fetched_at_bj": "",
+        "error": "",
+    }
+
+
+def print_observation_breakdown(fund_code: str, mode: ObservationMode) -> None:
+    holdings_record, holdings = load_holdings_record(fund_code)
+    quote_cache = load_json(mode.quote_cache, {})
+    meta, summaries = parse_observation_report(mode.report_file)
+    summary = summaries.get(fund_code, {})
+    valuation_date = str(meta.get("valuation_date") or "").strip()
+
+    if mode.futu_night and not quote_cache:
+        print(f"提示：未找到富途夜盘短缓存 {relative_path(mode.quote_cache)}，请先运行 futu_night_fund.py。")
+
+    print(f"{fund_code}")
+    print(f"基金：{summary.get('fund_name') or fund_code}")
+    print(f"观察类型：{mode.label}")
+    print(f"报告文件：{relative_path(mode.report_file)}")
+    print(f"短缓存：{relative_path(mode.quote_cache)}")
+    print(f"报告生成时间：{meta.get('generated_at_bj', '')}")
+    print(f"估值/目标日期：{valuation_date}")
+    if meta.get("afterhours_quote_date"):
+        print(f"盘后报价日：{meta.get('afterhours_quote_date')}")
+    print(
+        "持仓缓存："
+        f"{holdings_record.get('latest_quarter_label', '')}，"
+        f"抓取时间 {holdings_record.get('fetched_at', '')}，"
+        f"确认={holdings_record.get('target_quarter_confirmed', '')}"
+    )
+
+    if summary:
+        print(
+            "汇总："
+            f"持仓贡献 {fmt_optional_pct(summary.get('known_contribution_pct'))}，"
+            f"剩余仓位贡献 {fmt_optional_pct(summary.get('residual_contribution_pct'))}，"
+            f"{mode.label}估算 {fmt_optional_pct(summary.get('estimate_return_pct'))}"
+        )
+    else:
+        print("汇总：最新报告中没有找到该基金，将仅按短缓存复算。")
+
+    row_items: list[dict[str, Any]] = []
+    valid_pairs: list[tuple[float, float]] = []
+    for holding in holdings:
+        market = str(holding.get("市场") or "").strip().upper()
+        ticker = normalize_ticker(market, holding.get("ticker") or holding.get("股票代码"))
+        raw_weight = safe_float(holding.get("占净值比例"))
+        quote = observation_quote_for_holding(
+            quote_cache,
+            mode=mode,
+            market=market,
+            ticker=ticker,
+            valuation_date=valuation_date,
+        )
+        return_pct = safe_float_or_none(quote.get("return_pct"))
+        status = str(quote.get("status") or "missing").strip().lower()
+        is_valid = status in OBSERVATION_GOOD_STATUSES and return_pct is not None and raw_weight > 0
+        if is_valid:
+            valid_pairs.append((raw_weight, return_pct))
+        row_items.append({
+            "holding": holding,
+            "market": market,
+            "ticker": ticker,
+            "raw_weight": raw_weight,
+            "quote": quote,
+            "return_pct": return_pct,
+            "status": status,
+            "is_valid": is_valid,
+        })
+
+    raw_valid_weight = sum(weight for weight, _ in valid_pairs)
+    boosted_valid_weight = min(100.0, raw_valid_weight * OVERSEAS_VALID_HOLDING_BOOST) if raw_valid_weight > 0 else 0.0
+    actual_boost = boosted_valid_weight / raw_valid_weight if raw_valid_weight > 0 else 0.0
+
+    known_contribution = 0.0
+    for item in row_items:
+        if item["is_valid"]:
+            boosted_weight = item["raw_weight"] * actual_boost
+            contribution = boosted_weight * item["return_pct"] / 100.0
+            known_contribution += contribution
+        elif item["status"] == "zeroed":
+            boosted_weight = 0.0
+            contribution = 0.0
+        else:
+            boosted_weight = None
+            contribution = None
+        item["boosted_weight"] = boosted_weight
+        item["contribution"] = contribution
+
+    residual = observation_residual_quote(
+        quote_cache,
+        mode=mode,
+        summary=summary,
+        valuation_date=valuation_date,
+    )
+    residual_return = safe_float_or_none(residual.get("return_pct"))
+    residual_weight = max(0.0, 100.0 - boosted_valid_weight)
+    residual_contribution = residual_weight * residual_return / 100.0 if residual_return is not None else 0.0
+    estimate = known_contribution + residual_contribution
+
+    print()
+    print("持仓\t市场\t原始权重\t增强后权重\t涨跌幅\t贡献\t交易日\t报价时间\t缓存时间\t状态\t来源\t错误")
+    for item in row_items:
+        holding = item["holding"]
+        quote = item["quote"]
+        name = str(holding.get("股票名称") or item["ticker"]).strip()
+        label = f"{item['ticker']} {name}".strip()
+        print(
+            "\t".join([
+                label,
+                item["market"],
+                fmt_optional_pct(item["raw_weight"], digits=2, signed=False),
+                fmt_optional_pct(item.get("boosted_weight"), digits=4, signed=False),
+                fmt_optional_pct(item.get("return_pct"), digits=4, signed=True),
+                fmt_optional_pct(item.get("contribution"), digits=4, signed=True),
+                str(quote.get("trade_date", "")),
+                str(quote.get("quote_time_bj", "")),
+                str(quote.get("fetched_at_bj", "")),
+                str(quote.get("status", "")),
+                str(quote.get("source", "")),
+                str(quote.get("error", "")),
+            ])
+        )
+
+    residual_ticker = str(summary.get("residual_ticker") or "QQQ").strip().upper()
+    print()
+    print(
+        f"{fund_code} 合计：原始有效权重 {fmt_optional_pct(raw_valid_weight, digits=2, signed=False)}，"
+        f"增强后 {fmt_optional_pct(boosted_valid_weight, digits=4, signed=False)}，"
+        f"剩余 {fmt_optional_pct(residual_weight, digits=4, signed=False)} × "
+        f"{residual_ticker} {fmt_optional_pct(residual_return, digits=4, signed=True)} = "
+        f"{fmt_optional_pct(residual_contribution, digits=4, signed=True)}，"
+        f"最终 {fmt_optional_pct(known_contribution, digits=4, signed=True)} "
+        f"{'+' if residual_contribution >= 0 else '-'} "
+        f"{fmt_optional_pct(abs(residual_contribution), digits=4, signed=False)} = "
+        f"{fmt_optional_pct(estimate, digits=4, signed=True)}。"
+    )
+    print(
+        "补偿基准："
+        f"{residual_ticker}，trade_date={residual.get('trade_date', '')}，"
+        f"quote_time_bj={residual.get('quote_time_bj', '')}，"
+        f"fetched_at_bj={residual.get('fetched_at_bj', '')}，"
+        f"source={residual.get('source', '')}"
+    )
+
+    report_estimate = safe_float_or_none(summary.get("estimate_return_pct"))
+    if report_estimate is not None and abs(report_estimate - estimate) > 0.005:
+        print(
+            "提示：复算值与报告汇总略有差异，可能是短缓存已被后续运行覆盖，"
+            f"报告={fmt_optional_pct(report_estimate)}，复算={fmt_optional_pct(estimate)}。"
+        )
+
+
 def print_or_save_breakdown(fund_code: str, anchor_date: str, save_txt=None) -> None:
     if save_txt:
         buffer = io.StringIO()
@@ -356,9 +701,19 @@ def interactive_main() -> None:
     if not fund_code:
         raise SystemExit("基金代码不能为空。")
 
-    date_text = input(
-        "请输入估值日期，例如 2026-05-06；留空=列出可用估值日期；输入 latest=查看最新："
+    mode_text = input(
+        "请输入查询类型：正式/盘前/盘中/盘中实时/盘后/夜盘；留空=正式："
     ).strip()
+    observation_mode = normalize_observation_mode(mode_text)
+    if observation_mode is not None:
+        print()
+        print_observation_breakdown(fund_code=fund_code, mode=observation_mode)
+        return
+
+    if mode_text and mode_text not in {"正式", "日线", "完整日线", "main"}:
+        raise SystemExit(f"不支持的查询类型: {mode_text}")
+
+    date_text = input("请输入估值日期，例如 2026-05-06；留空=列出可用估值日期；输入 latest=查看最新：").strip()
 
     if not date_text:
         print()
@@ -381,10 +736,11 @@ def interactive_main() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="打印某只海外/全球基金在指定估值锚点的收益预估拆解。"
+        description="打印某只海外/全球基金在正式锚点或实时观察中的收益预估拆解。"
     )
     parser.add_argument("fund_code", nargs="?", help="基金代码，例如 022184")
-    parser.add_argument("valuation_anchor_date", nargs="?", help="估值锚点日期，例如 2026-05-06")
+    parser.add_argument("valuation_anchor_date", nargs="?", help="估值锚点日期，或观察类型：盘前/盘中/盘后/夜盘")
+    parser.add_argument("--observation", "--mode", default=None, help="实时观察类型：盘前、盘中、盘中实时、盘后、夜盘")
     parser.add_argument("--latest", action="store_true", help="使用该基金缓存中的最新估值日期")
     parser.add_argument("--list-dates", action="store_true", help="列出该基金缓存中已有的估值日期")
     parser.add_argument(
@@ -404,6 +760,11 @@ def main() -> None:
         return
 
     fund_code = normalize_fund_code(args.fund_code)
+    observation_mode = normalize_observation_mode(args.observation)
+    positional_mode = normalize_observation_mode(args.valuation_anchor_date)
+    if observation_mode is not None or positional_mode is not None:
+        print_observation_breakdown(fund_code=fund_code, mode=observation_mode or positional_mode)
+        return
 
     if args.list_dates or (not args.valuation_anchor_date and not args.latest):
         print_available_dates(fund_code)

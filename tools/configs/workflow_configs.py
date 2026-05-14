@@ -8,7 +8,7 @@ git_main.py 的运行流程配置。
 - 想调整运行顺序：移动下面列表里的整段字典。
 - 想新增脚本：复制一段字典，改 `name` 和 `script`。
 - 想临时不把某个脚本生成的图片发邮件：把 `collect_images` 改成 False。
-- 想让某个非关键脚本失败也不中断流程：把 `required` 改成 False。
+- 脚本失败不会中断总流程；`required` 仅用于日志里标记必要性，最后统一汇总失败日志。
 - 想控制某个脚本只在固定北京时间运行：配置 `run_window_bj=("HH:MM", "HH:MM")`。
 
 注意：
@@ -26,7 +26,7 @@ from __future__ import annotations
 # 字段解释：
 # - name: 日志里给人看的名称。这里可以写中文，方便定位是哪一步。
 # - script: 脚本路径。必须是相对项目根目录的路径，不要写绝对路径。
-# - required: True 表示这一步失败时总流程中断；False 表示只警告并继续。
+# - required: True 表示日志中标为必要步骤；失败也会继续运行后续步骤，并在最后汇总。
 # - collect_images: True 表示收集这一步本次新生成/更新的图片用于邮件发送。
 # - run_window_bj: 可选，北京时间闭区间；支持跨午夜窗口，例如 ("22:40", "02:00")。
 # - exclusive_window: 可选，True 表示命中该窗口时只运行同样命中窗口的实时观察脚本。
@@ -53,12 +53,6 @@ WORKFLOW_STEPS = [
     {
         "name": "安全版海外节假日图",
         "script": "safe_holidays.py",
-        "required": True,
-        "collect_images": True,
-    },
-    {
-        "name": "详细版海外节假日图",
-        "script": "holidays.py",
         "required": True,
         "collect_images": True,
     },
@@ -94,7 +88,7 @@ WORKFLOW_STEPS = [
         "script": "intraday_fund.py",
         "required": False,
         "collect_images": True,
-        "run_window_bj": ("22:40", "02:00"),
+        "run_window_bj": ("22:40", "01:30"),
         "exclusive_window": True,
         "args": ["--force"],
     },
