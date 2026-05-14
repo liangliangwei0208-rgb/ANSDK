@@ -63,6 +63,7 @@ from tools.configs.premarket_configs import (
     PREMARKET_START_MINUTE_BJ,
 )
 from tools.configs.safe_image_style_configs import SAFE_TITLE_STYLE, safe_daily_table_kwargs
+from tools.console_display import fund_progress
 from tools.fund_table_image import save_fund_estimate_table_image
 from tools.fund_universe import HAIWAI_FUND_CODES
 from tools.get_top10_holdings import (
@@ -2912,6 +2913,7 @@ def build_premarket_table(
     dict[tuple[str, str], dict[str, Any]],
     dict[tuple[str, str], list[str]],
 ]:
+    fund_codes = list(fund_codes)
     generated_at = coerce_bj_datetime(current_time)
     today = _observation_valuation_date(session, generated_at)
     quote_cache: dict[tuple[str, str], dict[str, Any]] = {}
@@ -2934,79 +2936,83 @@ def build_premarket_table(
     rows = []
     affected_funds: dict[tuple[str, str], list[str]] = defaultdict(list)
 
-    for index, fund_code_raw in enumerate(fund_codes, start=1):
-        fund_code = str(fund_code_raw).strip().zfill(6)
-        fund_name = cached_fund_names.get(fund_code) or get_fund_name(fund_code)
-        try:
-            holding_fetch_top_n = 10 if int(top_n or 10) <= 10 else int(top_n)
-            holdings_df = get_latest_stock_holdings_df(
-                fund_code=fund_code,
-                top_n=holding_fetch_top_n,
-                cache_enabled=True,
-            )
-            if int(top_n or 0) > 0 and len(holdings_df) > int(top_n):
-                holdings_df = holdings_df.head(int(top_n)).copy()
-            residual_key = get_observation_residual_benchmark_key(fund_code, session=session)
-            residual_benchmark = fetch_premarket_benchmark_quote(
-                residual_key,
-                today=today,
-                quote_cache=quote_cache,
-                disabled_sources=disabled_sources,
-                persistent_quote_cache=persistent_quote_cache,
-                cache_now=generated_at,
-                session=session,
-            )
-            residual_market = str(residual_benchmark.get("market", "")).strip().upper()
-            residual_ticker = str(residual_benchmark.get("ticker", "")).strip().upper()
-            if residual_market and residual_ticker:
-                affected_funds[(residual_market, residual_ticker)].append(fund_code)
-            detail_df, summary = estimate_premarket_holdings(
-                holdings_df,
-                today=today,
-                quote_cache=quote_cache,
-                disabled_sources=disabled_sources,
-                persistent_quote_cache=persistent_quote_cache,
-                cache_now=generated_at,
-                residual_benchmark=residual_benchmark,
-                session=session,
-            )
-            for _, item in detail_df.iterrows():
-                market = str(item.get("市场", "")).strip().upper()
-                ticker = str(item.get("ticker", "")).strip().upper()
-                if market and ticker:
-                    affected_funds[(market, ticker)].append(fund_code)
-            estimate = summary["estimate_return_pct"]
-            rows.append(
-                {
-                    "_input_order": index,
-                    "fund_code": fund_code,
-                    "fund_name": fund_name,
-                    "estimate_return_pct": estimate,
-                    **summary,
-                }
-            )
-        except Exception as exc:
-            rows.append(
-                {
-                    "_input_order": index,
-                    "fund_code": fund_code,
-                    "fund_name": fund_name,
-                    "estimate_return_pct": None,
-                    "known_contribution_pct": None,
-                    "valid_raw_weight_sum_pct": 0.0,
-                    "boosted_valid_weight_sum_pct": 0.0,
-                    "residual_benchmark_key": "",
-                    "residual_benchmark_label": "",
-                    "residual_ticker": "",
-                    "residual_weight_pct": 0.0,
-                    "residual_return_pct": None,
-                    "residual_contribution_pct": 0.0,
-                    "valid_holding_count": 0,
-                    "missing_holding_count": top_n,
-                    "data_status": "failed",
-                    "error": str(exc),
-                }
-            )
+    with fund_progress(f"{session.window_word}基金观察", len(fund_codes)) as progress:
+        for index, fund_code_raw in enumerate(fund_codes, start=1):
+            fund_code = str(fund_code_raw).strip().zfill(6)
+            fund_name = cached_fund_names.get(fund_code) or get_fund_name(fund_code)
+            progress.start_item(f"{fund_code} {fund_name}")
+            try:
+                holding_fetch_top_n = 10 if int(top_n or 10) <= 10 else int(top_n)
+                holdings_df = get_latest_stock_holdings_df(
+                    fund_code=fund_code,
+                    top_n=holding_fetch_top_n,
+                    cache_enabled=True,
+                )
+                if int(top_n or 0) > 0 and len(holdings_df) > int(top_n):
+                    holdings_df = holdings_df.head(int(top_n)).copy()
+                residual_key = get_observation_residual_benchmark_key(fund_code, session=session)
+                residual_benchmark = fetch_premarket_benchmark_quote(
+                    residual_key,
+                    today=today,
+                    quote_cache=quote_cache,
+                    disabled_sources=disabled_sources,
+                    persistent_quote_cache=persistent_quote_cache,
+                    cache_now=generated_at,
+                    session=session,
+                )
+                residual_market = str(residual_benchmark.get("market", "")).strip().upper()
+                residual_ticker = str(residual_benchmark.get("ticker", "")).strip().upper()
+                if residual_market and residual_ticker:
+                    affected_funds[(residual_market, residual_ticker)].append(fund_code)
+                detail_df, summary = estimate_premarket_holdings(
+                    holdings_df,
+                    today=today,
+                    quote_cache=quote_cache,
+                    disabled_sources=disabled_sources,
+                    persistent_quote_cache=persistent_quote_cache,
+                    cache_now=generated_at,
+                    residual_benchmark=residual_benchmark,
+                    session=session,
+                )
+                for _, item in detail_df.iterrows():
+                    market = str(item.get("市场", "")).strip().upper()
+                    ticker = str(item.get("ticker", "")).strip().upper()
+                    if market and ticker:
+                        affected_funds[(market, ticker)].append(fund_code)
+                estimate = summary["estimate_return_pct"]
+                rows.append(
+                    {
+                        "_input_order": index,
+                        "fund_code": fund_code,
+                        "fund_name": fund_name,
+                        "estimate_return_pct": estimate,
+                        **summary,
+                    }
+                )
+                progress.advance(success=True)
+            except Exception as exc:
+                rows.append(
+                    {
+                        "_input_order": index,
+                        "fund_code": fund_code,
+                        "fund_name": fund_name,
+                        "estimate_return_pct": None,
+                        "known_contribution_pct": None,
+                        "valid_raw_weight_sum_pct": 0.0,
+                        "boosted_valid_weight_sum_pct": 0.0,
+                        "residual_benchmark_key": "",
+                        "residual_benchmark_label": "",
+                        "residual_ticker": "",
+                        "residual_weight_pct": 0.0,
+                        "residual_return_pct": None,
+                        "residual_contribution_pct": 0.0,
+                        "valid_holding_count": 0,
+                        "missing_holding_count": top_n,
+                        "data_status": "failed",
+                        "error": str(exc),
+                    }
+                )
+                progress.advance(success=False, status=f"{fund_code} 失败")
 
     rows.sort(
         key=lambda row: (

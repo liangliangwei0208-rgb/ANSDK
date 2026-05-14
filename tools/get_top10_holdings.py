@@ -108,6 +108,7 @@ from tools.configs.residual_benchmark_configs import (
 )
 from tools.configs.security_mappings import KR_TICKER_MAP, US_TICKER_MAP
 from tools.cache_metadata import attach_cache_info
+from tools.console_display import cache_log, fund_progress, print_dataframe_table
 from tools.paths import CACHE_DIR
 from tools.runtime_stats import (
     format_market_stats_lines,
@@ -135,7 +136,7 @@ FOREIGN_FUTURES_FINAL_CONFIRM_MINUTE_BJ = 30
 
 def _cache_log(message: str) -> None:
     """统一缓存日志输出，便于在 GitHub Actions 中定位。"""
-    print(f"[CACHE] {message}", flush=True)
+    cache_log(message)
 
 
 def _ensure_cache_dir() -> None:
@@ -5850,6 +5851,8 @@ def estimate_funds(
     """
     if isinstance(fund_codes, str):
         fund_codes = [fund_codes]
+    else:
+        fund_codes = list(fund_codes)
 
     if proxy_map is None:
         proxy_map = DEFAULT_FUND_PROXY_MAP
@@ -5857,112 +5860,116 @@ def estimate_funds(
     rows = []
     detail_map = {}
 
-    for i, fund_code in enumerate(fund_codes, start=1):
-        code = str(fund_code).zfill(6)
+    with fund_progress("基金估算", len(fund_codes)) as progress:
+        for i, fund_code in enumerate(fund_codes, start=1):
+            code = str(fund_code).zfill(6)
+            progress.start_item(f"{code}")
 
-        try:
-            mode_norm = str(holding_mode).strip().lower()
-            will_use_stock_holdings = not (
-                mode_norm == "proxy"
-                or (mode_norm == "auto" and code in proxy_map)
-            )
-            residual_kwargs = {}
-            if will_use_stock_holdings and (
-                stock_residual_benchmark_return_pct is not None
-                or stock_residual_benchmark is not None
-                or auto_residual_benchmark_enabled
-            ):
-                residual_info = _fetch_residual_benchmark_for_fund(
-                    code,
-                    valuation_anchor_date=valuation_anchor_date,
-                    explicit_benchmark=stock_residual_benchmark,
-                    explicit_return_pct=stock_residual_benchmark_return_pct,
-                    explicit_label=stock_residual_benchmark_label,
-                    explicit_source=stock_residual_benchmark_source,
-                    explicit_status=stock_residual_benchmark_status,
-                    explicit_trade_date=stock_residual_benchmark_trade_date,
-                    auto_enabled=auto_residual_benchmark_enabled,
-                    security_return_cache_enabled=security_return_cache_enabled,
+            try:
+                mode_norm = str(holding_mode).strip().lower()
+                will_use_stock_holdings = not (
+                    mode_norm == "proxy"
+                    or (mode_norm == "auto" and code in proxy_map)
                 )
-                if residual_info:
-                    residual_kwargs = {
-                        "stock_residual_benchmark_return_pct": residual_info.get("return_pct"),
-                        "stock_residual_benchmark_label": residual_info.get("label"),
-                        "stock_residual_benchmark_source": residual_info.get("source"),
-                        "stock_residual_benchmark_status": residual_info.get("status"),
-                        "stock_residual_benchmark_trade_date": residual_info.get("trade_date"),
-                        "stock_residual_benchmark_ticker": residual_info.get("ticker"),
-                        "stock_residual_benchmark_market": residual_info.get("market", "US"),
-                        "stock_residual_benchmark_key": residual_info.get("key"),
-                    }
+                residual_kwargs = {}
+                if will_use_stock_holdings and (
+                    stock_residual_benchmark_return_pct is not None
+                    or stock_residual_benchmark is not None
+                    or auto_residual_benchmark_enabled
+                ):
+                    residual_info = _fetch_residual_benchmark_for_fund(
+                        code,
+                        valuation_anchor_date=valuation_anchor_date,
+                        explicit_benchmark=stock_residual_benchmark,
+                        explicit_return_pct=stock_residual_benchmark_return_pct,
+                        explicit_label=stock_residual_benchmark_label,
+                        explicit_source=stock_residual_benchmark_source,
+                        explicit_status=stock_residual_benchmark_status,
+                        explicit_trade_date=stock_residual_benchmark_trade_date,
+                        auto_enabled=auto_residual_benchmark_enabled,
+                        security_return_cache_enabled=security_return_cache_enabled,
+                    )
+                    if residual_info:
+                        residual_kwargs = {
+                            "stock_residual_benchmark_return_pct": residual_info.get("return_pct"),
+                            "stock_residual_benchmark_label": residual_info.get("label"),
+                            "stock_residual_benchmark_source": residual_info.get("source"),
+                            "stock_residual_benchmark_status": residual_info.get("status"),
+                            "stock_residual_benchmark_trade_date": residual_info.get("trade_date"),
+                            "stock_residual_benchmark_ticker": residual_info.get("ticker"),
+                            "stock_residual_benchmark_market": residual_info.get("market", "US"),
+                            "stock_residual_benchmark_key": residual_info.get("key"),
+                        }
 
-            result_row, detail_df, summary = estimate_one_fund(
-                fund_code=code,
-                top_n=top_n,
-                manual_returns_pct=manual_returns_pct,
-                prefer_intraday=prefer_intraday,
-                us_realtime=us_realtime,
-                hk_realtime=hk_realtime,
-                renormalize_available_holdings=renormalize_available_holdings,
-                include_purchase_limit=include_purchase_limit,
-                purchase_limit_timeout=purchase_limit_timeout,
-                purchase_limit_cache_days=purchase_limit_cache_days,
-                holding_cache_days=holding_cache_days,
-                cache_enabled=cache_enabled,
-                security_return_cache_enabled=security_return_cache_enabled,
-                cn_hk_hourly_cache=cn_hk_hourly_cache,
-                holding_mode=holding_mode,
-                proxy_map=proxy_map,
-                proxy_normalize_weights=proxy_normalize_weights,
-                valuation_mode=valuation_mode,
-                stock_residual_benchmark_return_pct=residual_kwargs.get("stock_residual_benchmark_return_pct"),
-                stock_residual_benchmark_label=residual_kwargs.get("stock_residual_benchmark_label"),
-                stock_residual_benchmark_source=residual_kwargs.get("stock_residual_benchmark_source"),
-                stock_residual_benchmark_status=residual_kwargs.get("stock_residual_benchmark_status"),
-                stock_residual_benchmark_trade_date=residual_kwargs.get("stock_residual_benchmark_trade_date"),
-                stock_residual_benchmark_ticker=residual_kwargs.get("stock_residual_benchmark_ticker"),
-                stock_residual_benchmark_market=residual_kwargs.get("stock_residual_benchmark_market", "US"),
-                stock_residual_benchmark_key=residual_kwargs.get("stock_residual_benchmark_key"),
-                zero_stale_cn_hk_returns=zero_stale_cn_hk_returns,
-                stale_market_estimate_date=stale_market_estimate_date,
-                valuation_anchor_date=valuation_anchor_date,
-            )
-
-            result_row["_输入顺序"] = i
-            rows.append(result_row)
-
-            detail_map[code] = {
-                "detail_df": detail_df,
-                "summary": summary,
-                "error": None,
-            }
-
-        except Exception as e:
-            error_row = {
-                "_输入顺序": i,
-                "基金代码": code,
-                "基金名称": get_fund_name(code),
-                "今日预估涨跌幅": None,
-                "_估算方式": "failed",
-            }
-
-            if include_purchase_limit:
-                error_row["限购金额"] = get_fund_purchase_limit(
+                result_row, detail_df, summary = estimate_one_fund(
                     fund_code=code,
-                    timeout=purchase_limit_timeout,
-                    cache_days=purchase_limit_cache_days,
+                    top_n=top_n,
+                    manual_returns_pct=manual_returns_pct,
+                    prefer_intraday=prefer_intraday,
+                    us_realtime=us_realtime,
+                    hk_realtime=hk_realtime,
+                    renormalize_available_holdings=renormalize_available_holdings,
+                    include_purchase_limit=include_purchase_limit,
+                    purchase_limit_timeout=purchase_limit_timeout,
+                    purchase_limit_cache_days=purchase_limit_cache_days,
+                    holding_cache_days=holding_cache_days,
                     cache_enabled=cache_enabled,
+                    security_return_cache_enabled=security_return_cache_enabled,
+                    cn_hk_hourly_cache=cn_hk_hourly_cache,
+                    holding_mode=holding_mode,
+                    proxy_map=proxy_map,
+                    proxy_normalize_weights=proxy_normalize_weights,
+                    valuation_mode=valuation_mode,
+                    stock_residual_benchmark_return_pct=residual_kwargs.get("stock_residual_benchmark_return_pct"),
+                    stock_residual_benchmark_label=residual_kwargs.get("stock_residual_benchmark_label"),
+                    stock_residual_benchmark_source=residual_kwargs.get("stock_residual_benchmark_source"),
+                    stock_residual_benchmark_status=residual_kwargs.get("stock_residual_benchmark_status"),
+                    stock_residual_benchmark_trade_date=residual_kwargs.get("stock_residual_benchmark_trade_date"),
+                    stock_residual_benchmark_ticker=residual_kwargs.get("stock_residual_benchmark_ticker"),
+                    stock_residual_benchmark_market=residual_kwargs.get("stock_residual_benchmark_market", "US"),
+                    stock_residual_benchmark_key=residual_kwargs.get("stock_residual_benchmark_key"),
+                    zero_stale_cn_hk_returns=zero_stale_cn_hk_returns,
+                    stale_market_estimate_date=stale_market_estimate_date,
+                    valuation_anchor_date=valuation_anchor_date,
                 )
 
-            rows.append(error_row)
+                result_row["_输入顺序"] = i
+                rows.append(result_row)
 
-            detail_map[code] = {
-                "detail_df": None,
-                "summary": None,
-                "error": repr(e),
-            }
+                detail_map[code] = {
+                    "detail_df": detail_df,
+                    "summary": summary,
+                    "error": None,
+                }
+                progress.advance(success=True)
 
-            print(f"[WARN] 基金 {code} 估算失败: {e}")
+            except Exception as e:
+                error_row = {
+                    "_输入顺序": i,
+                    "基金代码": code,
+                    "基金名称": get_fund_name(code),
+                    "今日预估涨跌幅": None,
+                    "_估算方式": "failed",
+                }
+
+                if include_purchase_limit:
+                    error_row["限购金额"] = get_fund_purchase_limit(
+                        fund_code=code,
+                        timeout=purchase_limit_timeout,
+                        cache_days=purchase_limit_cache_days,
+                        cache_enabled=cache_enabled,
+                    )
+
+                rows.append(error_row)
+
+                detail_map[code] = {
+                    "detail_df": None,
+                    "summary": None,
+                    "error": repr(e),
+                }
+
+                print(f"[WARN] 基金 {code} 估算失败: {e}")
+                progress.advance(success=False, status=f"{code} 失败")
 
     result_df = pd.DataFrame(rows)
 
@@ -6907,11 +6914,7 @@ def print_fund_estimate_table(result_df, title=None, pct_digits=4):
     show_df = result_df.copy()
     show_df["今日预估涨跌幅"] = show_df["今日预估涨跌幅"].map(lambda x: format_pct(x, digits=pct_digits))
 
-    print("=" * 100)
-    print(title)
-    print("=" * 100)
-    print(show_df.to_string(index=False))
-    print("=" * 100)
+    print_dataframe_table(show_df, title=title)
 
 
 def _build_daily_benchmark_table_rows(benchmark_footer_items, pct_digits=2):

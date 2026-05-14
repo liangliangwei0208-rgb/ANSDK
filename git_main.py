@@ -368,14 +368,14 @@ def run_script(step: WorkflowStep) -> ScriptResult:
 def unique_images(results: Iterable[ScriptResult]) -> list[Path]:
     """汇总本次要发送的图片，并去重。
 
-    只有 `collect_images=True` 且脚本成功的步骤才会进入邮件候选。这样你以后想让某个
-    脚本“正常生成但不发邮件”，只需要改 workflow_configs.py，不用动邮件逻辑。
+    只要 `collect_images=True` 就进入邮件候选，即使脚本最终失败，也把它已经生成
+    或更新的图片同步发出去，方便和失败日志一起排查。
     """
     images: list[Path] = []
     seen: set[Path] = set()
 
     for result in results:
-        if not result.success or not result.collect_images:
+        if not result.collect_images:
             continue
 
         for image in result.changed_images:
@@ -412,6 +412,10 @@ def build_email_text(
             f"生成或更新图片 {len(result.changed_images)} 张{collect_note}"
         )
 
+    changed_image_logs = format_changed_image_logs(results)
+    if changed_image_logs:
+        lines.extend(["", *changed_image_logs])
+
     failure_logs = format_failure_logs(results)
     if failure_logs:
         lines.extend(["", *failure_logs])
@@ -421,10 +425,28 @@ def build_email_text(
         for index, image in enumerate(images, start=1):
             lines.append(f"{index}. {relative_text(image)}")
     else:
-        lines.append("本次未检测到新建或更新的图片。")
+        lines.append("本次没有纳入邮件发送的图片。")
 
     lines.extend(["", "【提示】", RISK_NOTE])
     return "\n".join(lines)
+
+
+def format_changed_image_logs(results: Iterable[ScriptResult]) -> list[str]:
+    lines = ["【本次生成/更新图片】"]
+    found = False
+    for result in results:
+        if not result.changed_images:
+            continue
+        found = True
+        send_note = "纳入邮件" if result.collect_images else "仅生成，不纳入邮件"
+        status = "成功" if result.success else f"失败(退出码 {result.return_code})"
+        lines.append(f"- {result.step_name}({result.script_name})：{status}，{send_note}")
+        for image in result.changed_images:
+            lines.append(f"  {relative_text(image)}")
+
+    if not found:
+        lines.append("本次未检测到新建或更新的图片。")
+    return lines
 
 
 def format_failure_logs(results: Iterable[ScriptResult]) -> list[str]:
@@ -527,19 +549,22 @@ def main(argv: list[str] | None = None) -> int:
             size_text = "大小未知"
         log(f"待发送图片: {relative_text(image)} ({size_text})")
 
-    if not images:
+    if not images and not has_failures:
         log("本次没有可发送图片，跳过邮件发送")
         print_failure_logs(results)
-        return 1 if has_failures else 0
+        return 0
 
     if args.no_send:
         log("预演模式结束，未发送邮件")
         print("\n" + email_text, flush=True)
-        print_failure_logs(results)
         return 1 if has_failures else 0
 
-    subject = f"AHNS 每日市场图自动生成 - {finished_at.strftime('%Y-%m-%d %H:%M')}"
-    log(f"开始发送邮件：图片 {len(images)} 张，总大小 {format_file_size(image_total_size)}")
+    subject_status = "部分失败" if has_failures else "成功"
+    subject = f"AHNS 每日市场图自动生成({subject_status}) - {finished_at.strftime('%Y-%m-%d %H:%M')}"
+    if images:
+        log(f"开始发送邮件：图片 {len(images)} 张，总大小 {format_file_size(image_total_size)}")
+    else:
+        log("检测到失败日志但没有可发送图片，发送纯文本错误日志邮件")
     email_started = time.perf_counter()
     try:
         send_email(

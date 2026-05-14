@@ -25,6 +25,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from tools.console_display import print_key_values, print_records_table
+
 
 ROOT = Path(__file__).resolve().parent
 FUND_ESTIMATE_CACHE = ROOT / "cache" / "fund_estimate_return_cache.json"
@@ -211,19 +213,20 @@ def print_available_dates(fund_code: str) -> None:
         raise SystemExit(f"未找到基金 {fund_code} 的海外估算缓存。请先运行 main.py。")
 
     fund_name = items[-1].get("fund_name", "")
-    print(f"基金代码: {fund_code}")
-    print(f"基金名称: {fund_name}")
-    print("可用估值日期：")
-    print("估值日期\t表格显示\t数据状态\tis_final\t运行时间")
+    print_key_values("基金缓存记录", [("基金代码", fund_code), ("基金名称", fund_name)])
+    rows = []
     for item in items:
         anchor_date = normalize_date(item.get("valuation_anchor_date") or item.get("valuation_date"))
-        print(
-            f"{anchor_date}\t"
-            f"{fmt_pct(item.get('estimate_return_pct'), signed=True)}\t"
-            f"{item.get('data_status') or item.get('stage', '')}\t"
-            f"{item.get('is_final')}\t"
-            f"{item.get('run_time_bj', '')}"
+        rows.append(
+            {
+                "估值日期": anchor_date,
+                "表格显示": fmt_pct(item.get("estimate_return_pct"), signed=True),
+                "数据状态": item.get("data_status") or item.get("stage", ""),
+                "is_final": item.get("is_final"),
+                "运行时间": item.get("run_time_bj", ""),
+            }
         )
+    print_records_table(rows, title="可用估值日期")
     print()
     print(f"查看某日完整表: python fund_estimate_breakdown.py {fund_code} <估值日期>")
     print(f"查看最新完整表: python fund_estimate_breakdown.py {fund_code} --latest")
@@ -364,67 +367,86 @@ def print_breakdown(fund_code: str, anchor_date: str) -> None:
     total_calc = holding_contribution_sum + residual_contribution
     total_cache = safe_float(record.get("estimate_return_pct"))
 
-    print(f"基金代码: {fund_code}")
-    print(f"基金名称: {fund_name}")
-    print(f"估值锚点: {anchor_date}")
-    print(f"运行时间: {record.get('run_time_bj', '')}")
-    print(f"数据状态: {record.get('data_status') or record.get('stage', '')}, is_final={record.get('is_final')}")
-    print()
-    print(f"前十大披露持仓合计: {fmt_pct(raw_sum)}")
-    print(f"行情有效持仓: {fmt_pct(valid_sum)}")
-    print(f"行情失败持仓: {fmt_pct(failed_sum)}")
-    print(f"有效持仓放大系数: {boost:.2f}")
-    print(f"放大后有效持仓权重: {fmt_pct(valid_sum)} * {boost:.2f} = {fmt_pct(boosted_valid)}")
-    print(f"补偿仓位: 100% - {fmt_pct(boosted_valid)} = {fmt_pct(residual_weight)}")
-    print(
-        f"补偿基准: {residual_label}，交易日 {residual_trade_date or '-'}，"
-        f"状态 {residual_status}，涨幅 {fmt_pct(residual_return, digits=4, signed=True)}"
+    print_key_values(
+        "基金估算拆解",
+        [
+            ("基金代码", fund_code),
+            ("基金名称", fund_name),
+            ("估值锚点", anchor_date),
+            ("运行时间", record.get("run_time_bj", "")),
+            ("数据状态", f"{record.get('data_status') or record.get('stage', '')}, is_final={record.get('is_final')}"),
+            ("前十大披露持仓合计", fmt_pct(raw_sum)),
+            ("行情有效持仓", fmt_pct(valid_sum)),
+            ("行情失败持仓", fmt_pct(failed_sum)),
+            ("有效持仓放大系数", f"{boost:.2f}"),
+            ("放大后有效持仓权重", f"{fmt_pct(valid_sum)} * {boost:.2f} = {fmt_pct(boosted_valid)}"),
+            ("补偿仓位", f"100% - {fmt_pct(boosted_valid)} = {fmt_pct(residual_weight)}"),
+            (
+                "补偿基准",
+                f"{residual_label}，交易日 {residual_trade_date or '-'}，状态 {residual_status}，涨幅 {fmt_pct(residual_return, digits=4, signed=True)}",
+            ),
+        ],
     )
-    print()
-    print("逐项贡献如下：")
-    print("持仓\t市场\t代码\t原始权重\t状态\t行情交易日\t股票自身涨跌幅\t估算权重\t对基金贡献\t数据源")
 
+    table_rows = []
     for row in rows:
-        print(
-            f"{row['name']}\t"
-            f"{row['market']}\t"
-            f"{row['ticker']}\t"
-            f"{fmt_pct(row['raw_weight'])}\t"
-            f"{row['status']}\t"
-            f"{row['trade_date'] or '-'}\t"
-            f"{fmt_pct(row['return_pct'], digits=4, signed=True)}\t"
-            f"{fmt_pct(row['effective_weight'], digits=3)}\t"
-            f"{fmt_pct(row['contribution'], digits=4, signed=True)}\t"
-            f"{row['source'] or '-'}"
+        table_rows.append(
+            {
+                "持仓": row["name"],
+                "市场": row["market"],
+                "代码": row["ticker"],
+                "原始权重": fmt_pct(row["raw_weight"]),
+                "状态": row["status"],
+                "行情交易日": row["trade_date"] or "-",
+                "股票自身涨跌幅": fmt_pct(row["return_pct"], digits=4, signed=True),
+                "估算权重": fmt_pct(row["effective_weight"], digits=3),
+                "对基金贡献": fmt_pct(row["contribution"], digits=4, signed=True),
+                "数据源": row["source"] or "-",
+            }
         )
 
-    print(
-        f"{residual_label}补偿仓位\t"
-        f"{residual_market}\t"
-        f"{residual_ticker}\t"
-        f"{fmt_pct(residual_weight)}\t"
-        f"{residual_status}\t"
-        f"{residual_trade_date or '-'}\t"
-        f"{fmt_pct(residual_return, digits=4, signed=True)}\t"
-        f"{fmt_pct(residual_weight, digits=3)}\t"
-        f"{fmt_pct(residual_contribution, digits=4, signed=True)}\t"
-        "residual_benchmark"
+    table_rows.append(
+        {
+            "持仓": f"{residual_label}补偿仓位",
+            "市场": residual_market,
+            "代码": residual_ticker,
+            "原始权重": fmt_pct(residual_weight),
+            "状态": residual_status,
+            "行情交易日": residual_trade_date or "-",
+            "股票自身涨跌幅": fmt_pct(residual_return, digits=4, signed=True),
+            "估算权重": fmt_pct(residual_weight, digits=3),
+            "对基金贡献": fmt_pct(residual_contribution, digits=4, signed=True),
+            "数据源": "residual_benchmark",
+        }
     )
+    print_records_table(table_rows, title="逐项贡献")
 
-    print()
-    print(f"持仓贡献合计: {fmt_pct(holding_contribution_sum, digits=6, signed=True)}")
-    print(f"补偿仓位贡献: {fmt_pct(residual_contribution, digits=6, signed=True)}")
-    print(f"复算合计: {fmt_pct(total_calc, digits=6, signed=True)}")
-    print(f"缓存估算值: {fmt_pct(total_cache, digits=6, signed=True)}")
-    print(f"表格显示: {fmt_pct(total_cache, digits=2, signed=True)}")
+    print_key_values(
+        "合计",
+        [
+            ("持仓贡献合计", fmt_pct(holding_contribution_sum, digits=6, signed=True)),
+            ("补偿仓位贡献", fmt_pct(residual_contribution, digits=6, signed=True)),
+            ("复算合计", fmt_pct(total_calc, digits=6, signed=True)),
+            ("缓存估算值", fmt_pct(total_cache, digits=6, signed=True)),
+            ("表格显示", fmt_pct(total_cache, digits=2, signed=True)),
+        ],
+    )
 
     failed_rows = [row for row in rows if row["status"] in BAD_STATUSES]
     if failed_rows:
-        print()
-        print("失败/未完成持仓：")
-        for row in failed_rows:
-            msg = row["error"] or row["source"] or "无错误详情"
-            print(f"- {row['name']} {row['market']}:{row['ticker']} {row['status']} {msg}")
+        print_records_table(
+            [
+                {
+                    "持仓": row["name"],
+                    "市场": row["market"],
+                    "代码": row["ticker"],
+                    "状态": row["status"],
+                    "错误": row["error"] or row["source"] or "无错误详情",
+                }
+                for row in failed_rows
+            ],
+            title="失败/未完成持仓",
+        )
 
 
 def parse_observation_report(report_file: Path) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
@@ -532,31 +554,40 @@ def print_observation_breakdown(fund_code: str, mode: ObservationMode) -> None:
     if mode.futu_night and not quote_cache:
         print(f"提示：未找到富途夜盘短缓存 {relative_path(mode.quote_cache)}，请先运行 futu_night_fund.py。")
 
-    print(f"{fund_code}")
-    print(f"基金：{summary.get('fund_name') or fund_code}")
-    print(f"观察类型：{mode.label}")
-    print(f"报告文件：{relative_path(mode.report_file)}")
-    print(f"短缓存：{relative_path(mode.quote_cache)}")
-    print(f"报告生成时间：{meta.get('generated_at_bj', '')}")
-    print(f"估值/目标日期：{valuation_date}")
+    info_items = [
+        ("基金代码", fund_code),
+        ("基金", summary.get("fund_name") or fund_code),
+        ("观察类型", mode.label),
+        ("报告文件", relative_path(mode.report_file)),
+        ("短缓存", relative_path(mode.quote_cache)),
+        ("报告生成时间", meta.get("generated_at_bj", "")),
+        ("估值/目标日期", valuation_date),
+    ]
     if meta.get("afterhours_quote_date"):
-        print(f"盘后报价日：{meta.get('afterhours_quote_date')}")
-    print(
-        "持仓缓存："
-        f"{holdings_record.get('latest_quarter_label', '')}，"
-        f"抓取时间 {holdings_record.get('fetched_at', '')}，"
-        f"确认={holdings_record.get('target_quarter_confirmed', '')}"
+        info_items.append(("盘后报价日", meta.get("afterhours_quote_date")))
+    info_items.append(
+        (
+            "持仓缓存",
+            f"{holdings_record.get('latest_quarter_label', '')}，"
+            f"抓取时间 {holdings_record.get('fetched_at', '')}，"
+            f"确认={holdings_record.get('target_quarter_confirmed', '')}",
+        )
     )
 
     if summary:
-        print(
-            "汇总："
+        info_items.append(
+            (
+                "汇总",
+                (
             f"持仓贡献 {fmt_optional_pct(summary.get('known_contribution_pct'))}，"
             f"剩余仓位贡献 {fmt_optional_pct(summary.get('residual_contribution_pct'))}，"
             f"{mode.label}估算 {fmt_optional_pct(summary.get('estimate_return_pct'))}"
+                ),
+            )
         )
     else:
-        print("汇总：最新报告中没有找到该基金，将仅按短缓存复算。")
+        info_items.append(("汇总", "最新报告中没有找到该基金，将仅按短缓存复算。"))
+    print_key_values("实时观察拆解", info_items)
 
     row_items: list[dict[str, Any]] = []
     valid_pairs: list[tuple[float, float]] = []
@@ -617,49 +648,54 @@ def print_observation_breakdown(fund_code: str, mode: ObservationMode) -> None:
     residual_contribution = residual_weight * residual_return / 100.0 if residual_return is not None else 0.0
     estimate = known_contribution + residual_contribution
 
-    print()
-    print("持仓\t市场\t原始权重\t增强后权重\t涨跌幅\t贡献\t交易日\t报价时间\t缓存时间\t状态\t来源\t错误")
+    table_rows = []
     for item in row_items:
         holding = item["holding"]
         quote = item["quote"]
         name = str(holding.get("股票名称") or item["ticker"]).strip()
         label = f"{item['ticker']} {name}".strip()
-        print(
-            "\t".join([
-                label,
-                item["market"],
-                fmt_optional_pct(item["raw_weight"], digits=2, signed=False),
-                fmt_optional_pct(item.get("boosted_weight"), digits=4, signed=False),
-                fmt_optional_pct(item.get("return_pct"), digits=4, signed=True),
-                fmt_optional_pct(item.get("contribution"), digits=4, signed=True),
-                str(quote.get("trade_date", "")),
-                str(quote.get("quote_time_bj", "")),
-                str(quote.get("fetched_at_bj", "")),
-                str(quote.get("status", "")),
-                str(quote.get("source", "")),
-                str(quote.get("error", "")),
-            ])
+        table_rows.append(
+            {
+                "持仓": label,
+                "市场": item["market"],
+                "原始权重": fmt_optional_pct(item["raw_weight"], digits=2, signed=False),
+                "增强后权重": fmt_optional_pct(item.get("boosted_weight"), digits=4, signed=False),
+                "涨跌幅": fmt_optional_pct(item.get("return_pct"), digits=4, signed=True),
+                "贡献": fmt_optional_pct(item.get("contribution"), digits=4, signed=True),
+                "交易日": str(quote.get("trade_date", "")),
+                "报价时间": str(quote.get("quote_time_bj", "")),
+                "缓存时间": str(quote.get("fetched_at_bj", "")),
+                "状态": str(quote.get("status", "")),
+                "来源": str(quote.get("source", "")),
+                "错误": str(quote.get("error", "")),
+            }
         )
+    print_records_table(table_rows, title="持仓明细")
 
     residual_ticker = str(summary.get("residual_ticker") or "QQQ").strip().upper()
-    print()
-    print(
-        f"{fund_code} 合计：原始有效权重 {fmt_optional_pct(raw_valid_weight, digits=2, signed=False)}，"
-        f"增强后 {fmt_optional_pct(boosted_valid_weight, digits=4, signed=False)}，"
-        f"剩余 {fmt_optional_pct(residual_weight, digits=4, signed=False)} × "
-        f"{residual_ticker} {fmt_optional_pct(residual_return, digits=4, signed=True)} = "
-        f"{fmt_optional_pct(residual_contribution, digits=4, signed=True)}，"
-        f"最终 {fmt_optional_pct(known_contribution, digits=4, signed=True)} "
-        f"{'+' if residual_contribution >= 0 else '-'} "
-        f"{fmt_optional_pct(abs(residual_contribution), digits=4, signed=False)} = "
-        f"{fmt_optional_pct(estimate, digits=4, signed=True)}。"
-    )
-    print(
-        "补偿基准："
-        f"{residual_ticker}，trade_date={residual.get('trade_date', '')}，"
-        f"quote_time_bj={residual.get('quote_time_bj', '')}，"
-        f"fetched_at_bj={residual.get('fetched_at_bj', '')}，"
-        f"source={residual.get('source', '')}"
+    print_key_values(
+        "合计",
+        [
+            (
+                "计算过程",
+                f"{fund_code}：原始有效权重 {fmt_optional_pct(raw_valid_weight, digits=2, signed=False)}，"
+                f"增强后 {fmt_optional_pct(boosted_valid_weight, digits=4, signed=False)}，"
+                f"剩余 {fmt_optional_pct(residual_weight, digits=4, signed=False)} × "
+                f"{residual_ticker} {fmt_optional_pct(residual_return, digits=4, signed=True)} = "
+                f"{fmt_optional_pct(residual_contribution, digits=4, signed=True)}，"
+                f"最终 {fmt_optional_pct(known_contribution, digits=4, signed=True)} "
+                f"{'+' if residual_contribution >= 0 else '-'} "
+                f"{fmt_optional_pct(abs(residual_contribution), digits=4, signed=False)} = "
+                f"{fmt_optional_pct(estimate, digits=4, signed=True)}。",
+            ),
+            (
+                "补偿基准",
+                f"{residual_ticker}，trade_date={residual.get('trade_date', '')}，"
+                f"quote_time_bj={residual.get('quote_time_bj', '')}，"
+                f"fetched_at_bj={residual.get('fetched_at_bj', '')}，"
+                f"source={residual.get('source', '')}",
+            ),
+        ],
     )
 
     report_estimate = safe_float_or_none(summary.get("estimate_return_pct"))

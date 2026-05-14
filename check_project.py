@@ -185,6 +185,7 @@ def check_dependencies() -> list[CheckItem]:
         ("openpyxl", "Excel 读取支持"),
         ("PIL", "Pillow 图片绘制"),
         ("pandas_market_calendars", "海外交易日历"),
+        ("rich", "终端进度条和表格输出"),
     ]
 
     items: list[CheckItem] = []

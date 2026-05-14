@@ -8,3 +8,4 @@ openpyxl
 pillow
 pykrx
 pandas_market_calendars
+rich

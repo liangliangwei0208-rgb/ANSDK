@@ -42,7 +42,7 @@
 & F:\anaconda\envs\py310\python.exe .\git_main.py --no-send
 ```
 
-`git_main.py` 的运行顺序由 `tools/configs/workflow_configs.py` 维护。想调整每日运行脚本、脚本顺序、必要性标记、某一步生成的图片是否进入邮件候选，优先改这个配置文件，不要直接改总入口主逻辑。实时观察窗口也在该配置文件维护，命中独占窗口时只运行对应实时观察脚本。子脚本失败不会中断总流程，会在运行结束后统一打印失败日志。
+`git_main.py` 的运行顺序由 `tools/configs/workflow_configs.py` 维护。想调整每日运行脚本、脚本顺序、必要性标记、某一步生成的图片是否进入邮件候选，优先改这个配置文件，不要直接改总入口主逻辑。实时观察窗口也在该配置文件维护，命中独占窗口时只运行对应实时观察脚本。子脚本失败不会中断总流程，会在运行结束后统一打印失败日志；失败日志会写入邮件正文，失败步骤已生成/更新的图片也会按 `collect_images` 纳入邮件。
 
 当前默认运行顺序：
 
@@ -64,13 +64,15 @@
 
 `git_main.py` 会扫描 `output/` 中本次新生成或更新的图片，并通过 `tools/email_send.py` 发送邮件。邮件发送保留“正文内嵌图片 + 附件图片”的方式；发送前会打印图片数量、单张大小和总大小。
 
+基金估算相关脚本在交互终端中使用 Rich 进度条和表格输出；非交互环境会自动退回纯文本。需要排障并恢复传统逐行缓存日志时，可设置 `AHNS_PROGRESS=0`。
+
 `check_project.py` 是只读体检工具：检查 Python 环境、关键目录、`cache/mark.jpg`、核心缓存、邮箱配置、依赖导入、Git 状态和总入口配置。它不联网、不拉行情、不出图、不写缓存、不发邮件、不删除文件、不提交 Git。
 
 `premarket_fund.py`、`intraday_fund.py`、`afterhours_fund.py`、`futu_night_fund.py` 是独立实时观察入口；在 `git_main.py` 命中对应窗口时独占运行，也可手动用 `--force` 调试。它们不写 `cache/fund_estimate_return_cache.json`。
 
 ## 关键文件
 
-- `git_main.py`：项目总控入口，顺序运行全部脚本，收集本次图片并发送邮件；子脚本失败会继续运行后续步骤，并在最后汇总错误输出；支持 `--no-send` 和 `--receiver`。
+- `git_main.py`：项目总控入口，顺序运行全部脚本，收集本次图片并发送邮件；子脚本失败会继续运行后续步骤，并在最后汇总错误输出，同步写入邮件正文；支持 `--no-send` 和 `--receiver`。
 - `check_project.py`：运行前自检入口，只检查不修改，用于确认环境、缓存、依赖、邮箱配置和流程配置是否基本正常。
 - `main.py`：主计算入口，生成市场 RSI 图、海外/全球基金详细估算图，并写入 `cache/fund_estimate_return_cache.json`。
 - `premarket_fund.py`：盘前观察图手动入口；生成 `output/safe_haiwai_premarket.png` 和盘前失败报告，不写正式基金估算缓存。

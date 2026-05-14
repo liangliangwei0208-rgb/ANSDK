@@ -5710,5 +5710,55 @@
     "calendar_is_open": true,
     "error": "",
     "fetched_at": "2026-05-14T19:55:05+08:00"
+  },
+  "US:TSM:2026-05-15:last_close": {
+    "fetched_at": "2026-05-15T00:00:40",
+    "market": "US",
+    "ticker": "TSM",
+    "return_pct": 0.6343133306484283,
+    "source": "ak_stock_us_daily",
+    "valuation_mode": "last_close",
+    "trade_date": "2026-05-13",
+    "last_refresh_attempt_at": "2026-05-15T00:00:40"
+  },
+  "US:LITE:2026-05-15:last_close": {
+    "fetched_at": "2026-05-15T00:00:42",
+    "market": "US",
+    "ticker": "LITE",
+    "return_pct": 3.829216925138801,
+    "source": "ak_stock_us_daily",
+    "valuation_mode": "last_close",
+    "trade_date": "2026-05-13",
+    "last_refresh_attempt_at": "2026-05-15T00:00:42"
+  },
+  "CN:300502:2026-05-15:last_close": {
+    "fetched_at": "2026-05-15T00:01:09",
+    "market": "CN",
+    "ticker": "300502",
+    "return_pct": -1.76,
+    "source": "ak_stock_zh_a_hist_pct",
+    "valuation_mode": "last_close",
+    "trade_date": "2026-05-14",
+    "last_refresh_attempt_at": "2026-05-15T00:01:09"
+  },
+  "US:NVDA:2026-05-15:last_close": {
+    "fetched_at": "2026-05-15T00:01:15",
+    "market": "US",
+    "ticker": "NVDA",
+    "return_pct": 2.2873448681945963,
+    "source": "ak_stock_us_daily",
+    "valuation_mode": "last_close",
+    "trade_date": "2026-05-13",
+    "last_refresh_attempt_at": "2026-05-15T00:01:15"
+  },
+  "US:GOOGL:2026-05-15:last_close": {
+    "fetched_at": "2026-05-15T00:01:17",
+    "market": "US",
+    "ticker": "GOOGL",
+    "return_pct": 3.9421711630308387,
+    "source": "ak_stock_us_daily",
+    "valuation_mode": "last_close",
+    "trade_date": "2026-05-13",
+    "last_refresh_attempt_at": "2026-05-15T00:01:17"
   }
 }

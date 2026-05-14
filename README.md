@@ -17,6 +17,7 @@ AHNS 是一个个人公开数据建模复盘项目，用于生成每日市场 RS
 - 对缓存文件生成说明：安全容器型 JSON 可内嵌 `_cache_info`，其余 key-map JSON、CSV 和图片缓存统一通过 `cache/README.md` 说明。
 - 缓存采用数据质量覆盖：`traded/closed` 可复用，`pending/missing/stale` 只记录诊断信息，不阻止下次重试。
 - 支持运行前自检，快速检查 Python 环境、关键缓存、水印图片、邮箱配置、依赖和总入口配置。
+- 交互终端使用 Rich 进度条和基金表格输出；非交互环境自动退回纯文本，`AHNS_PROGRESS=0` 可关闭进度层。
 - 支持 QQ 邮箱自动发送本次运行生成或更新的图片。
 - 支持 GitHub Actions 定时运行、手动触发、缓存自动回推和失败图片 artifact。
 
@@ -113,7 +114,7 @@ AHNS 是一个个人公开数据建模复盘项目，用于生成每日市场 RS
 
 ## 常用维护入口
 
-- `tools/configs/workflow_configs.py`：维护 `git_main.py` 每天运行哪些脚本、运行顺序、必要性标记、图片是否进入邮件候选。子脚本失败不会中断总流程，会在运行结束后统一打印失败日志。
+- `tools/configs/workflow_configs.py`：维护 `git_main.py` 每天运行哪些脚本、运行顺序、必要性标记、图片是否进入邮件候选。子脚本失败不会中断总流程，会在运行结束后统一打印失败日志；失败日志会写入邮件正文，失败步骤已生成/更新的图片也会按 `collect_images` 纳入邮件。
 - `tools/configs/fund_universe_configs.py`：维护海外/全球基金池；新增基金代码优先改这里，基金代码请写 6 位字符串。
 - `tools/configs/fund_proxy_configs.py`：维护代理型基金和海外有效披露持仓增强系数。
 - `tools/configs/residual_benchmark_configs.py`：维护海外股票持仓型基金的补偿仓位基准；默认纳斯达克100，`007844` 当前使用 `XOP`。

@@ -32,6 +32,7 @@ from tools.configs.futu_night_configs import (
     FUTU_NIGHT_START_HOUR_BJ,
     FUTU_NIGHT_START_MINUTE_BJ,
 )
+from tools.console_display import fund_progress, print_stage
 from tools.fund_universe import HAIWAI_FUND_CODES
 from tools.futu_night_quotes import (
     FutuNightQuoteProvider,
@@ -455,6 +456,7 @@ def build_futu_night_table(
     dict[tuple[str, str], dict[str, Any]],
     dict[tuple[str, str], list[str]],
 ]:
+    fund_codes = list(fund_codes)
     generated_at = coerce_bj_datetime(current_time)
     target_date = futu_night_valuation_date(generated_at)
     purchase_limit_cache = _load_purchase_limit_cache()
@@ -464,99 +466,133 @@ def build_futu_night_table(
     disabled_sources: set[str] = set()
     fund_payloads: list[dict[str, Any]] = []
 
-    for index, fund_code_raw in enumerate(fund_codes, start=1):
-        fund_code = str(fund_code_raw).strip().zfill(6)
-        fund_name = cached_fund_names.get(fund_code) or get_fund_name(fund_code)
-        try:
-            holding_fetch_top_n = 10 if int(top_n or 10) <= 10 else int(top_n)
-            holdings_df = get_latest_stock_holdings_df(
-                fund_code=fund_code,
-                top_n=holding_fetch_top_n,
-                cache_enabled=True,
-            )
-            if int(top_n or 0) > 0 and len(holdings_df) > int(top_n):
-                holdings_df = holdings_df.head(int(top_n)).copy()
-            residual_key = get_observation_residual_benchmark_key(fund_code, session=FUTU_NIGHT_SESSION)
-            residual_spec = _premarket_benchmark_spec(residual_key, session=FUTU_NIGHT_SESSION)
-            fund_payloads.append(
-                {
-                    "_input_order": index,
-                    "fund_code": fund_code,
-                    "fund_name": fund_name,
-                    "holdings_df": holdings_df,
-                    "residual_key": residual_key,
-                    "residual_spec": residual_spec,
-                }
-            )
-        except Exception as exc:
-            fund_payloads.append(
-                {
-                    "_input_order": index,
-                    "fund_code": fund_code,
-                    "fund_name": fund_name,
-                    "load_error": str(exc),
-                }
-            )
+    with fund_progress("夜盘持仓加载", len(fund_codes)) as progress:
+        for index, fund_code_raw in enumerate(fund_codes, start=1):
+            fund_code = str(fund_code_raw).strip().zfill(6)
+            fund_name = cached_fund_names.get(fund_code) or get_fund_name(fund_code)
+            progress.start_item(f"{fund_code} {fund_name}")
+            try:
+                holding_fetch_top_n = 10 if int(top_n or 10) <= 10 else int(top_n)
+                holdings_df = get_latest_stock_holdings_df(
+                    fund_code=fund_code,
+                    top_n=holding_fetch_top_n,
+                    cache_enabled=True,
+                )
+                if int(top_n or 0) > 0 and len(holdings_df) > int(top_n):
+                    holdings_df = holdings_df.head(int(top_n)).copy()
+                residual_key = get_observation_residual_benchmark_key(fund_code, session=FUTU_NIGHT_SESSION)
+                residual_spec = _premarket_benchmark_spec(residual_key, session=FUTU_NIGHT_SESSION)
+                fund_payloads.append(
+                    {
+                        "_input_order": index,
+                        "fund_code": fund_code,
+                        "fund_name": fund_name,
+                        "holdings_df": holdings_df,
+                        "residual_key": residual_key,
+                        "residual_spec": residual_spec,
+                    }
+                )
+                progress.advance(success=True)
+            except Exception as exc:
+                fund_payloads.append(
+                    {
+                        "_input_order": index,
+                        "fund_code": fund_code,
+                        "fund_name": fund_name,
+                        "load_error": str(exc),
+                    }
+                )
+                progress.advance(success=False, status=f"{fund_code} 持仓加载失败")
 
-    provider.prefetch_us_returns(_collect_us_tickers(fund_payloads), target_us_date=target_date)
+    prefetch_tickers = _collect_us_tickers(fund_payloads)
+    print_stage(f"夜盘批量预取美股报价: {len(prefetch_tickers)} 个标的")
+    provider.prefetch_us_returns(prefetch_tickers, target_us_date=target_date)
 
     rows: list[dict[str, Any]] = []
-    for payload in fund_payloads:
-        fund_code = str(payload.get("fund_code", "")).zfill(6)
-        fund_name = str(payload.get("fund_name", ""))
-        if payload.get("load_error"):
-            rows.append(
-                {
-                    "_input_order": payload.get("_input_order", 0),
-                    "fund_code": fund_code,
-                    "fund_name": fund_name,
-                    "estimate_return_pct": None,
-                    "known_contribution_pct": None,
-                    "valid_raw_weight_sum_pct": 0.0,
-                    "boosted_valid_weight_sum_pct": 0.0,
-                    "residual_benchmark_key": "",
-                    "residual_benchmark_label": "",
-                    "residual_ticker": "",
-                    "residual_weight_pct": 0.0,
-                    "residual_return_pct": None,
-                    "residual_contribution_pct": 0.0,
-                    "valid_holding_count": 0,
-                    "missing_holding_count": top_n,
-                    "data_status": "failed",
-                    "error": str(payload.get("load_error", "")),
-                }
-            )
-            continue
+    with fund_progress("夜盘基金估算", len(fund_payloads)) as progress:
+        for payload in fund_payloads:
+            fund_code = str(payload.get("fund_code", "")).zfill(6)
+            fund_name = str(payload.get("fund_name", ""))
+            progress.start_item(f"{fund_code} {fund_name}")
+            if payload.get("load_error"):
+                rows.append(
+                    {
+                        "_input_order": payload.get("_input_order", 0),
+                        "fund_code": fund_code,
+                        "fund_name": fund_name,
+                        "estimate_return_pct": None,
+                        "known_contribution_pct": None,
+                        "valid_raw_weight_sum_pct": 0.0,
+                        "boosted_valid_weight_sum_pct": 0.0,
+                        "residual_benchmark_key": "",
+                        "residual_benchmark_label": "",
+                        "residual_ticker": "",
+                        "residual_weight_pct": 0.0,
+                        "residual_return_pct": None,
+                        "residual_contribution_pct": 0.0,
+                        "valid_holding_count": 0,
+                        "missing_holding_count": top_n,
+                        "data_status": "failed",
+                        "error": str(payload.get("load_error", "")),
+                    }
+                )
+                progress.advance(success=False, status=f"{fund_code} 持仓加载失败")
+                continue
 
-        residual_benchmark = _fetch_benchmark_quote(
-            payload.get("residual_key"),
-            target_date=target_date,
-            provider=provider,
-            quote_cache=quote_cache,
-        )
-        residual_key = _quote_key(residual_benchmark.get("market"), residual_benchmark.get("ticker"))
-        if residual_key[0] and residual_key[1]:
-            affected_funds[residual_key].append(fund_code)
+            try:
+                residual_benchmark = _fetch_benchmark_quote(
+                    payload.get("residual_key"),
+                    target_date=target_date,
+                    provider=provider,
+                    quote_cache=quote_cache,
+                )
+                residual_key = _quote_key(residual_benchmark.get("market"), residual_benchmark.get("ticker"))
+                if residual_key[0] and residual_key[1]:
+                    affected_funds[residual_key].append(fund_code)
 
-        summary = _estimate_fund_holdings(
-            payload["holdings_df"],
-            target_date=target_date,
-            residual_benchmark=residual_benchmark,
-            provider=provider,
-            quote_cache=quote_cache,
-            affected_funds=affected_funds,
-            fund_code=fund_code,
-            disabled_sources=disabled_sources,
-        )
-        rows.append(
-            {
-                "_input_order": payload.get("_input_order", 0),
-                "fund_code": fund_code,
-                "fund_name": fund_name,
-                "estimate_return_pct": summary["estimate_return_pct"],
-                **summary,
-            }
-        )
+                summary = _estimate_fund_holdings(
+                    payload["holdings_df"],
+                    target_date=target_date,
+                    residual_benchmark=residual_benchmark,
+                    provider=provider,
+                    quote_cache=quote_cache,
+                    affected_funds=affected_funds,
+                    fund_code=fund_code,
+                    disabled_sources=disabled_sources,
+                )
+                rows.append(
+                    {
+                        "_input_order": payload.get("_input_order", 0),
+                        "fund_code": fund_code,
+                        "fund_name": fund_name,
+                        "estimate_return_pct": summary["estimate_return_pct"],
+                        **summary,
+                    }
+                )
+                progress.advance(success=True)
+            except Exception as exc:
+                rows.append(
+                    {
+                        "_input_order": payload.get("_input_order", 0),
+                        "fund_code": fund_code,
+                        "fund_name": fund_name,
+                        "estimate_return_pct": None,
+                        "known_contribution_pct": None,
+                        "valid_raw_weight_sum_pct": 0.0,
+                        "boosted_valid_weight_sum_pct": 0.0,
+                        "residual_benchmark_key": "",
+                        "residual_benchmark_label": "",
+                        "residual_ticker": "",
+                        "residual_weight_pct": 0.0,
+                        "residual_return_pct": None,
+                        "residual_contribution_pct": 0.0,
+                        "valid_holding_count": 0,
+                        "missing_holding_count": top_n,
+                        "data_status": "failed",
+                        "error": str(exc),
+                    }
+                )
+                progress.advance(success=False, status=f"{fund_code} 估算失败")
 
     rows.sort(
         key=lambda row: (

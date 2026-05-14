@@ -24,6 +24,7 @@ from typing import Any
 import pandas as pd
 from tools.configs.market_benchmark_configs import MARKET_BENCHMARK_ITEMS
 from tools.configs.safe_image_style_configs import SAFE_TITLE_STYLE, safe_daily_table_kwargs
+from tools.console_display import print_dataframe_table
 from tools.fund_table_image import save_fund_estimate_table_image
 from tools.fund_universe import HAIWAI_FUND_CODES
 from tools.paths import (
@@ -477,8 +478,7 @@ def build_and_save_haiwai(cache: dict[str, Any]) -> bool:
         valuation_date=haiwai_date,
         benchmark_footer_items=benchmark_footer_items,
     )
-    print("\n海外基金安全版预估表：")
-    print(haiwai_df.to_string(index=False))
+    print_dataframe_table(haiwai_df, title="海外基金安全版预估表")
     return True
 
 
