@@ -86,6 +86,13 @@ def safe_float_or_none(value: Any) -> float | None:
         return None
 
 
+def format_console_pct(value: Any, digits: int = 2) -> str:
+    number = safe_float_or_none(value)
+    if number is None:
+        return "获取失败"
+    return f"{number:+.{digits}f}%"
+
+
 def load_estimate_cache() -> dict[str, Any]:
     if not CACHE_FILE.exists():
         raise FileNotFoundError(
@@ -478,7 +485,9 @@ def build_and_save_haiwai(cache: dict[str, Any]) -> bool:
         valuation_date=haiwai_date,
         benchmark_footer_items=benchmark_footer_items,
     )
-    print_dataframe_table(haiwai_df, title="海外基金安全版预估表")
+    console_df = haiwai_df.copy()
+    console_df[DISPLAY_OBSERVATION_COLUMN] = console_df[DISPLAY_OBSERVATION_COLUMN].map(format_console_pct)
+    print_dataframe_table(console_df, title="海外基金安全版预估表")
     return True
 
 

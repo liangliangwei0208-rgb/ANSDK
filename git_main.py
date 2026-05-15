@@ -61,7 +61,6 @@ class WorkflowStep:
     args: tuple[str, ...]
     run_window_start_bj: datetime_time | None = None
     run_window_end_bj: datetime_time | None = None
-    exclusive_window: bool = False
 
     @property
     def has_run_window(self) -> bool:
@@ -216,7 +215,6 @@ def resolve_workflow_steps() -> list[WorkflowStep]:
         else:
             args = tuple(str(arg) for arg in args_raw)
         run_window_start_bj, run_window_end_bj = parse_run_window_bj(item.get("run_window_bj"))
-        exclusive_window = bool(item.get("exclusive_window", False))
 
         if not resolved_script.exists():
             missing.append(f"{name}({script_text})")
@@ -231,7 +229,6 @@ def resolve_workflow_steps() -> list[WorkflowStep]:
                 args=args,
                 run_window_start_bj=run_window_start_bj,
                 run_window_end_bj=run_window_end_bj,
-                exclusive_window=exclusive_window,
             )
         )
 
@@ -257,7 +254,11 @@ def select_workflow_steps_for_time(
     steps: list[WorkflowStep],
     current_time: datetime | None = None,
 ) -> list[WorkflowStep]:
-    """按配置中的北京时间窗口切换每日流程和实时观察流程。"""
+    """按配置中的北京时间窗口追加实时观察步骤。
+
+    无运行窗口的步骤属于日常完整流程，始终运行；带窗口的步骤只在命中
+    对应北京时间窗口时追加运行。
+    """
     now_bj = coerce_beijing_datetime(current_time or datetime.now(BJ_TZ))
     current = now_bj.time().replace(microsecond=0)
     matching_window_steps = [
@@ -268,9 +269,6 @@ def select_workflow_steps_for_time(
         and step.run_window_end_bj is not None
         and time_in_closed_window(current, step.run_window_start_bj, step.run_window_end_bj)
     ]
-    exclusive_steps = [step for step in matching_window_steps if step.exclusive_window]
-    if exclusive_steps:
-        return exclusive_steps
     return [step for step in steps if not step.has_run_window or step in matching_window_steps]
 
 
@@ -515,10 +513,17 @@ def main(argv: list[str] | None = None) -> int:
     ]
     if configured_windows:
         log("配置化实时观察窗口: " + "；".join(configured_windows))
-    if steps and all(step.has_run_window for step in steps):
-        log("当前命中实时观察窗口")
+    daily_steps = [step for step in steps if not step.has_run_window]
+    realtime_steps = [step for step in steps if step.has_run_window]
+    if realtime_steps:
+        log(
+            "当前命中实时观察窗口，完整日流程照常运行，并追加实时观察步骤: "
+            + " -> ".join(step.name for step in realtime_steps)
+        )
     else:
-        log("当前运行每日流程/非窗口步骤")
+        log("当前未命中实时观察窗口，仅运行完整日流程/非窗口步骤")
+    if daily_steps:
+        log("完整日流程步骤: " + " -> ".join(step.name for step in daily_steps))
     log("实际运行顺序: " + " -> ".join(step.name for step in steps))
 
     results: list[ScriptResult] = []

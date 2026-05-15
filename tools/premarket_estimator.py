@@ -63,7 +63,7 @@ from tools.configs.premarket_configs import (
     PREMARKET_START_MINUTE_BJ,
 )
 from tools.configs.safe_image_style_configs import SAFE_TITLE_STYLE, safe_daily_table_kwargs
-from tools.console_display import fund_progress
+from tools.console_display import fund_progress, print_dataframe_table
 from tools.fund_table_image import save_fund_estimate_table_image
 from tools.fund_universe import HAIWAI_FUND_CODES
 from tools.get_top10_holdings import (
@@ -145,6 +145,45 @@ PREMARKET_QUOTE_CACHE_FIELDS = (
     "fetched_at_bj",
     "error",
 )
+
+
+def _progress_status(progress, message: str) -> None:
+    if progress is None:
+        return
+    try:
+        progress.set_status(str(message))
+    except Exception:
+        return
+
+
+def _format_progress_return_pct(value: Any) -> str:
+    try:
+        if value is None or pd.isna(value):
+            return "无涨跌幅"
+        return f"{float(value):+.4f}%"
+    except Exception:
+        return "无涨跌幅"
+
+
+def _print_observation_estimate_table(
+    display_df: pd.DataFrame,
+    *,
+    session: "ObservationSessionConfig",
+    generated_at: datetime,
+) -> None:
+    if display_df is None:
+        return
+    show_df = display_df.copy()
+    return_col = "今日预估涨跌幅"
+    if return_col in show_df.columns:
+        show_df[return_col] = show_df[return_col].map(_format_progress_return_pct)
+        show_df = show_df.rename(columns={return_col: session.display_return_column})
+    title_date = _observation_valuation_date(session, generated_at)
+    title_date_label = "估值日" if str(session.us_quote_mode).lower() in {"afterhours", "intraday", "futu_night"} else "观察日"
+    print_dataframe_table(
+        show_df,
+        title=f"{session.window_word}基金模型观察汇总 {title_date_label}: {title_date}",
+    )
 
 
 @dataclass(frozen=True)
@@ -2560,6 +2599,8 @@ def estimate_premarket_holdings(
     cache_now: datetime | None = None,
     residual_benchmark: dict[str, Any] | None = None,
     session: ObservationSessionConfig = PREMARKET_SESSION,
+    progress=None,
+    progress_label: str = "",
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     cache_now = coerce_bj_datetime(cache_now)
     us_quote_mode = str(session.us_quote_mode).lower()
@@ -2583,10 +2624,19 @@ def estimate_premarket_holdings(
     errors = []
     trade_dates = []
 
-    for _, row in df.iterrows():
+    total_holdings = len(df)
+    progress_prefix = str(progress_label or "").strip()
+
+    for holding_index, (_, row) in enumerate(df.iterrows(), start=1):
         market = str(row.get("市场", "")).strip().upper()
         ticker = str(row.get("ticker", "")).strip().upper()
+        name = str(row.get("股票名称", "") or row.get("name", "") or "").strip()
         key = _premarket_quote_tuple_key(market, ticker)
+        item_label = (
+            f"{progress_prefix} {session.window_word}持仓 {holding_index}/{total_holdings}: "
+            f"{market}:{ticker} {name}"
+        ).strip()
+        _progress_status(progress, f"{item_label} 获取行情")
         try:
             if us_quote_mode == "afterhours" and market in {"CN", "HK", "KR"}:
                 item = _afterhours_non_us_zero_return(market, ticker, valuation_date=today)
@@ -2596,6 +2646,7 @@ def estimate_premarket_holdings(
                 statuses.append(str(item.get("status", "")))
                 trade_dates.append(str(item.get("trade_date", "")))
                 errors.append(str(item.get("error", "")))
+                _progress_status(progress, f"{item_label} -> zeroed 0.0000% {item.get('source', '')} {today}")
                 continue
 
             item = _get_cached_premarket_quote(
@@ -2642,6 +2693,7 @@ def estimate_premarket_holdings(
                         persistent_quote_cache.pop(_premarket_quote_cache_key(market, ticker), None)
                     item = None
             if item is None:
+                _progress_status(progress, f"{item_label} 缓存未命中，重新请求")
                 item = fetch_holding_current_return(
                     market,
                     ticker,
@@ -2658,6 +2710,8 @@ def estimate_premarket_holdings(
                     item=item,
                     cache_now=cache_now,
                 )
+            else:
+                _progress_status(progress, f"{item_label} 使用实时短缓存")
             return_pct = _safe_float(item.get("return_pct"))
             if return_pct is None:
                 raise RuntimeError(str(item.get("error") or "行情无有效涨跌幅"))
@@ -2667,6 +2721,14 @@ def estimate_premarket_holdings(
             statuses.append(status_value)
             trade_dates.append(str(item.get("trade_date", "")))
             errors.append("")
+            _progress_status(
+                progress,
+                (
+                    f"{item_label} -> {status_value} "
+                    f"{_format_progress_return_pct(return_pct)} "
+                    f"{item.get('source', '')} {item.get('trade_date', '')}"
+                ).strip(),
+            )
         except Exception as exc:
             error_text = str(exc)
             returns.append(None)
@@ -2674,6 +2736,7 @@ def estimate_premarket_holdings(
             statuses.append("missing")
             trade_dates.append("")
             errors.append(error_text)
+            _progress_status(progress, f"{item_label} 获取失败: {error_text}")
             existing = quote_cache.get(key)
             if not isinstance(existing, dict) or existing.get("return_pct") is not None:
                 quote_cache[key] = {
@@ -2943,6 +3006,7 @@ def build_premarket_table(
             progress.start_item(f"{fund_code} {fund_name}")
             try:
                 holding_fetch_top_n = 10 if int(top_n or 10) <= 10 else int(top_n)
+                progress.set_status(f"{fund_code} {fund_name} 加载前{holding_fetch_top_n}大持仓")
                 holdings_df = get_latest_stock_holdings_df(
                     fund_code=fund_code,
                     top_n=holding_fetch_top_n,
@@ -2950,7 +3014,9 @@ def build_premarket_table(
                 )
                 if int(top_n or 0) > 0 and len(holdings_df) > int(top_n):
                     holdings_df = holdings_df.head(int(top_n)).copy()
+                progress.set_status(f"{fund_code} {fund_name} 持仓加载完成: {len(holdings_df)} 条")
                 residual_key = get_observation_residual_benchmark_key(fund_code, session=session)
+                progress.set_status(f"{fund_code} 获取{session.window_word}补偿基准: {residual_key}")
                 residual_benchmark = fetch_premarket_benchmark_quote(
                     residual_key,
                     today=today,
@@ -2959,6 +3025,14 @@ def build_premarket_table(
                     persistent_quote_cache=persistent_quote_cache,
                     cache_now=generated_at,
                     session=session,
+                )
+                progress.set_status(
+                    (
+                        f"{fund_code} 补偿基准 -> {residual_benchmark.get('label', '')} "
+                        f"{_format_progress_return_pct(residual_benchmark.get('return_pct'))} "
+                        f"{residual_benchmark.get('source', '')} "
+                        f"{residual_benchmark.get('trade_date', '')}"
+                    ).strip()
                 )
                 residual_market = str(residual_benchmark.get("market", "")).strip().upper()
                 residual_ticker = str(residual_benchmark.get("ticker", "")).strip().upper()
@@ -2973,6 +3047,8 @@ def build_premarket_table(
                     cache_now=generated_at,
                     residual_benchmark=residual_benchmark,
                     session=session,
+                    progress=progress,
+                    progress_label=fund_code,
                 )
                 for _, item in detail_df.iterrows():
                     market = str(item.get("市场", "")).strip().upper()
@@ -2988,6 +3064,13 @@ def build_premarket_table(
                         "estimate_return_pct": estimate,
                         **summary,
                     }
+                )
+                progress.set_status(
+                    (
+                        f"{fund_code} {session.window_word}估算完成: "
+                        f"{_format_progress_return_pct(summary.get('estimate_return_pct'))} "
+                        f"status={summary.get('data_status', '')}"
+                    ).strip()
                 )
                 progress.advance(success=True)
             except Exception as exc:
@@ -3012,6 +3095,7 @@ def build_premarket_table(
                         "error": str(exc),
                     }
                 )
+                progress.set_status(f"{fund_code} {session.window_word}估算失败: {exc}")
                 progress.advance(success=False, status=f"{fund_code} 失败")
 
     rows.sort(
@@ -3160,6 +3244,11 @@ def run_observation_session(
         top_n=top_n,
         current_time=generated_at,
         session=session,
+    )
+    _print_observation_estimate_table(
+        display_df,
+        session=session,
+        generated_at=generated_at,
     )
     save_premarket_image(
         display_df,

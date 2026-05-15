@@ -139,6 +139,24 @@ def _cache_log(message: str) -> None:
     cache_log(message)
 
 
+def _progress_status(progress, message: str) -> None:
+    if progress is None:
+        return
+    try:
+        progress.set_status(str(message))
+    except Exception:
+        return
+
+
+def _format_progress_return_pct(value) -> str:
+    try:
+        if value is None or pd.isna(value):
+            return "无涨跌幅"
+        return f"{float(value):+.4f}%"
+    except Exception:
+        return "无涨跌幅"
+
+
 def _ensure_cache_dir() -> None:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -4957,6 +4975,8 @@ def estimate_stock_holdings_return(
     stale_market_estimate_date=None,
     stale_market_zero_markets=("CN", "HK", "KR"),
     valuation_anchor_date=None,
+    progress=None,
+    progress_label="",
 ):
     """
     使用前 N 大股票持仓估算基金收益。
@@ -4991,12 +5011,20 @@ def estimate_stock_holdings_return(
     market_effective_flags = []
     warnings = []
 
-    for _, row in df.iterrows():
+    total_holdings = len(df)
+    progress_prefix = str(progress_label or "").strip()
+
+    for holding_index, (_, row) in enumerate(df.iterrows(), start=1):
         market = row["市场"]
         ticker = row["ticker"]
         name = row["股票名称"]
         trade_date = ""
         stale_zeroed = False
+        item_label = (
+            f"{progress_prefix} 持仓 {holding_index}/{total_holdings}: "
+            f"{str(market).strip().upper()}:{str(ticker).strip().upper()} {name}"
+        ).strip()
+        _progress_status(progress, f"{item_label} 获取行情")
 
         try:
             if anchor_date:
@@ -5071,6 +5099,7 @@ def estimate_stock_holdings_return(
                 anchor_status = "missing"
                 anchor_error = str(e)
                 warnings.append(f"{name}({ticker}) 涨跌幅获取失败，已从有效估算权重中剔除：{e}")
+                _progress_status(progress, f"{item_label} 获取失败: {e}")
             else:
                 raise
 
@@ -5081,6 +5110,14 @@ def estimate_stock_holdings_return(
         anchor_errors.append(anchor_error)
         stale_zero_flags.append(bool(stale_zeroed))
         market_effective_flags.append(bool(anchor_status in ANCHOR_COMPLETE_STATUSES))
+        _progress_status(
+            progress,
+            (
+                f"{item_label} -> {anchor_status} "
+                f"{_format_progress_return_pct(r_pct)} {source} "
+                f"{_normalize_trade_date_key(trade_date)}"
+            ).strip(),
+        )
 
     df["当日涨跌幅"] = returns
     df["收益数据源"] = sources
@@ -5373,6 +5410,8 @@ def estimate_proxy_components_return(
     stale_market_estimate_date=None,
     stale_market_zero_markets=("CN", "HK", "KR"),
     valuation_anchor_date=None,
+    progress=None,
+    progress_label="",
 ):
     """
     根据 proxy_map 中的底层 ETF / 指数组件估算基金涨跌幅。
@@ -5436,16 +5475,24 @@ def estimate_proxy_components_return(
     market_effective_flags = []
     warnings = []
 
-    for _, row in df.iterrows():
+    total_components = len(df)
+    progress_prefix = str(progress_label or fund_code).strip()
+
+    for component_index, (_, row) in enumerate(df.iterrows(), start=1):
         component = row.to_dict()
         name = component.get("name", component.get("code", ""))
         market = _component_market_type(component)
+        code = str(component.get("code", "")).strip().upper()
         trade_date = ""
         stale_zeroed = False
+        item_label = (
+            f"{progress_prefix} 代理 {component_index}/{total_components}: "
+            f"{market}:{code} {name}"
+        ).strip()
+        _progress_status(progress, f"{item_label} 获取行情")
 
         try:
             if anchor_date:
-                code = str(component.get("code", "")).strip()
                 manual_key_candidates = [code, code.upper(), str(component.get("name", "")).strip()]
                 manual_value = None
                 if manual_returns_pct:
@@ -5518,6 +5565,7 @@ def estimate_proxy_components_return(
                 anchor_status = "missing"
                 anchor_error = str(e)
                 warnings.append(f"{name} 代理涨跌幅获取失败：{e}")
+                _progress_status(progress, f"{item_label} 获取失败: {e}")
             else:
                 raise
 
@@ -5528,6 +5576,14 @@ def estimate_proxy_components_return(
         anchor_errors.append(anchor_error)
         stale_zero_flags.append(bool(stale_zeroed))
         market_effective_flags.append(bool(anchor_status in ANCHOR_COMPLETE_STATUSES))
+        _progress_status(
+            progress,
+            (
+                f"{item_label} -> {anchor_status} "
+                f"{_format_progress_return_pct(r_pct)} {source} "
+                f"{_normalize_trade_date_key(trade_date)}"
+            ).strip(),
+        )
 
     df["市场"] = [_component_market_type(x) for x in df.to_dict("records")]
     df["当日涨跌幅"] = returns
@@ -5659,6 +5715,7 @@ def estimate_one_fund(
     zero_stale_cn_hk_returns=False,
     stale_market_estimate_date=None,
     valuation_anchor_date=None,
+    progress=None,
 ):
     """
     估算单只基金的今日涨跌幅。
@@ -5725,6 +5782,7 @@ def estimate_one_fund(
     summary = None
 
     if mode == "proxy" or (mode == "auto" and fund_code in proxy_map):
+        _progress_status(progress, f"{fund_code} {fund_name} 使用代理资产估算")
         detail_df, summary = estimate_proxy_components_return(
             fund_code=fund_code,
             proxy_map=proxy_map,
@@ -5739,14 +5797,18 @@ def estimate_one_fund(
             zero_stale_cn_hk_returns=zero_stale_cn_hk_returns,
             stale_market_estimate_date=stale_market_estimate_date,
             valuation_anchor_date=valuation_anchor_date,
+            progress=progress,
+            progress_label=fund_code,
         )
     else:
+        _progress_status(progress, f"{fund_code} {fund_name} 加载前{top_n}大股票持仓")
         latest_df = get_latest_stock_holdings_df(
             fund_code=fund_code,
             top_n=top_n,
             holding_cache_days=holding_cache_days,
             cache_enabled=cache_enabled,
         )
+        _progress_status(progress, f"{fund_code} {fund_name} 持仓加载完成: {len(latest_df)} 条")
 
         detail_df, summary = estimate_stock_holdings_return(
             latest_df=latest_df,
@@ -5769,6 +5831,8 @@ def estimate_one_fund(
             zero_stale_cn_hk_returns=zero_stale_cn_hk_returns,
             stale_market_estimate_date=stale_market_estimate_date,
             valuation_anchor_date=valuation_anchor_date,
+            progress=progress,
+            progress_label=fund_code,
         )
 
     summary["valuation_mode"] = summary.get("effective_valuation_mode", _normalize_valuation_mode(valuation_mode))
@@ -5877,6 +5941,7 @@ def estimate_funds(
                     or stock_residual_benchmark is not None
                     or auto_residual_benchmark_enabled
                 ):
+                    _progress_status(progress, f"{code} 获取剩余仓位补偿基准")
                     residual_info = _fetch_residual_benchmark_for_fund(
                         code,
                         valuation_anchor_date=valuation_anchor_date,
@@ -5890,6 +5955,16 @@ def estimate_funds(
                         security_return_cache_enabled=security_return_cache_enabled,
                     )
                     if residual_info:
+                        _progress_status(
+                            progress,
+                            (
+                                f"{code} 补偿基准 -> "
+                                f"{residual_info.get('label', '')} "
+                                f"{_format_progress_return_pct(residual_info.get('return_pct'))} "
+                                f"{residual_info.get('source', '')} "
+                                f"{residual_info.get('trade_date', '')}"
+                            ).strip(),
+                        )
                         residual_kwargs = {
                             "stock_residual_benchmark_return_pct": residual_info.get("return_pct"),
                             "stock_residual_benchmark_label": residual_info.get("label"),
@@ -5931,6 +6006,7 @@ def estimate_funds(
                     zero_stale_cn_hk_returns=zero_stale_cn_hk_returns,
                     stale_market_estimate_date=stale_market_estimate_date,
                     valuation_anchor_date=valuation_anchor_date,
+                    progress=progress,
                 )
 
                 result_row["_输入顺序"] = i
@@ -5941,6 +6017,14 @@ def estimate_funds(
                     "summary": summary,
                     "error": None,
                 }
+                _progress_status(
+                    progress,
+                    (
+                        f"{code} 估算完成: "
+                        f"{_format_progress_return_pct(summary.get('estimated_return_pct'))} "
+                        f"status={summary.get('data_status', '')}"
+                    ).strip(),
+                )
                 progress.advance(success=True)
 
             except Exception as e:

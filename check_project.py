@@ -282,12 +282,13 @@ def check_realtime_observation_anchors() -> list[CheckItem]:
     except Exception as exc:
         return [make_item("ERROR", "实时观察 workflow", f"解析失败: {exc}")]
 
+    daily_scripts = tuple(step.script_path.name for step in steps if not step.has_run_window)
     workflow_cases = [
-        ("2026-05-14T09:00:00+08:00", ("afterhours_fund.py",), "09:00 盘后"),
-        ("2026-05-14T11:45:00+08:00", ("futu_night_fund.py",), "11:45 富途夜盘"),
-        ("2026-05-14T18:00:00+08:00", ("premarket_fund.py",), "18:00 盘前"),
-        ("2026-05-14T23:30:00+08:00", ("intraday_fund.py",), "23:30 盘中"),
-        ("2026-05-15T01:00:00+08:00", ("intraday_fund.py",), "次日 01:00 盘中"),
+        ("2026-05-14T09:00:00+08:00", daily_scripts + ("afterhours_fund.py",), "09:00 盘后"),
+        ("2026-05-14T11:45:00+08:00", daily_scripts + ("futu_night_fund.py",), "11:45 富途夜盘"),
+        ("2026-05-14T18:00:00+08:00", daily_scripts + ("premarket_fund.py",), "18:00 盘前"),
+        ("2026-05-14T23:30:00+08:00", daily_scripts + ("intraday_fund.py",), "23:30 盘中"),
+        ("2026-05-15T01:00:00+08:00", daily_scripts + ("intraday_fund.py",), "次日 01:00 盘中"),
     ]
     for text, expected_scripts, title in workflow_cases:
         dt = datetime.fromisoformat(text).astimezone(bj_tz)
@@ -305,11 +306,10 @@ def check_realtime_observation_anchors() -> list[CheckItem]:
 
     daily_dt = datetime.fromisoformat("2026-05-15T02:01:00+08:00").astimezone(bj_tz)
     daily_selected = tuple(step.script_path.name for step in select_workflow_steps_for_time(steps, daily_dt))
-    realtime_scripts = {"afterhours_fund.py", "futu_night_fund.py", "premarket_fund.py", "intraday_fund.py"}
-    if daily_selected and not any(script in realtime_scripts for script in daily_selected):
+    if daily_selected and daily_selected == daily_scripts:
         items.append(make_item("OK", "workflow 02:01 每日流程", "未命中实时观察入口"))
     else:
-        items.append(make_item("ERROR", "workflow 02:01 每日流程", f"实际 {daily_selected}"))
+        items.append(make_item("ERROR", "workflow 02:01 每日流程", f"期望 {daily_scripts}，实际 {daily_selected}"))
 
     date_cases = [
         (

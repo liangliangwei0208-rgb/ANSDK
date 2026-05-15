@@ -32,7 +32,7 @@ from tools.configs.futu_night_configs import (
     FUTU_NIGHT_START_HOUR_BJ,
     FUTU_NIGHT_START_MINUTE_BJ,
 )
-from tools.console_display import fund_progress, print_stage
+from tools.console_display import fund_progress, print_dataframe_table, print_stage
 from tools.fund_universe import HAIWAI_FUND_CODES
 from tools.futu_night_quotes import (
     FutuNightQuoteProvider,
@@ -93,6 +93,39 @@ FUTU_NIGHT_SESSION = ObservationSessionConfig(
 )
 
 PURCHASE_LIMIT_COLUMN = "模型观察基金信息"
+
+
+def _progress_status(progress, message: str) -> None:
+    if progress is None:
+        return
+    try:
+        progress.set_status(str(message))
+    except Exception:
+        return
+
+
+def _format_progress_return_pct(value: Any) -> str:
+    try:
+        if value is None or pd.isna(value):
+            return "无涨跌幅"
+        return f"{float(value):+.4f}%"
+    except Exception:
+        return "无涨跌幅"
+
+
+def _print_night_estimate_table(display_df: pd.DataFrame, *, generated_at: datetime) -> None:
+    if display_df is None:
+        return
+    show_df = display_df.copy()
+    return_col = "今日预估涨跌幅"
+    if return_col in show_df.columns:
+        show_df[return_col] = show_df[return_col].map(_format_progress_return_pct)
+        show_df = show_df.rename(columns={return_col: FUTU_NIGHT_SESSION.display_return_column})
+    title_date = futu_night_valuation_date(generated_at)
+    print_dataframe_table(
+        show_df,
+        title=f"夜盘基金模型观察汇总 估值日: {title_date}",
+    )
 
 
 def in_futu_night_window(check_time: datetime | str | None = None) -> bool:
@@ -351,17 +384,23 @@ def _estimate_fund_holdings(
     affected_funds: dict[tuple[str, str], list[str]],
     fund_code: str,
     disabled_sources: set[str],
+    progress=None,
 ) -> dict[str, Any]:
     return_pairs = []
     valid_count = 0
     zeroed_count = 0
     missing_count = 0
 
-    for _, row in holdings_df.iterrows():
+    total_holdings = len(holdings_df)
+
+    for holding_index, (_, row) in enumerate(holdings_df.iterrows(), start=1):
         market = str(row.get("市场", "")).strip().upper()
         ticker = str(row.get("ticker", "")).strip().upper()
+        name = str(row.get("股票名称", "") or row.get("name", "") or "").strip()
         weight = _safe_float(row.get("占净值比例"))
         key = _quote_key(market, ticker)
+        item_label = f"{fund_code} 夜盘持仓 {holding_index}/{total_holdings}: {market}:{ticker} {name}".strip()
+        _progress_status(progress, f"{item_label} 获取行情")
         if market and ticker:
             affected_funds[key].append(fund_code)
         try:
@@ -380,10 +419,19 @@ def _estimate_fund_holdings(
             if weight is not None and weight > 0:
                 return_pairs.append((weight, return_pct))
                 valid_count += 1
+            _progress_status(
+                progress,
+                (
+                    f"{item_label} -> {status} "
+                    f"{_format_progress_return_pct(return_pct)} "
+                    f"{item.get('source', '')} {item.get('trade_date', '')}"
+                ).strip(),
+            )
         except Exception as exc:
             item = _zero_return(market, ticker, target_date=target_date, error=str(exc))
             quote_cache[key] = dict(item)
             zeroed_count += 1
+            _progress_status(progress, f"{item_label} 获取失败，夜盘置零: {exc}")
 
     calc = estimate_boosted_valid_holding_with_residual(
         return_pairs,
@@ -473,6 +521,7 @@ def build_futu_night_table(
             progress.start_item(f"{fund_code} {fund_name}")
             try:
                 holding_fetch_top_n = 10 if int(top_n or 10) <= 10 else int(top_n)
+                progress.set_status(f"{fund_code} {fund_name} 加载前{holding_fetch_top_n}大持仓")
                 holdings_df = get_latest_stock_holdings_df(
                     fund_code=fund_code,
                     top_n=holding_fetch_top_n,
@@ -480,6 +529,7 @@ def build_futu_night_table(
                 )
                 if int(top_n or 0) > 0 and len(holdings_df) > int(top_n):
                     holdings_df = holdings_df.head(int(top_n)).copy()
+                progress.set_status(f"{fund_code} {fund_name} 持仓加载完成: {len(holdings_df)} 条")
                 residual_key = get_observation_residual_benchmark_key(fund_code, session=FUTU_NIGHT_SESSION)
                 residual_spec = _premarket_benchmark_spec(residual_key, session=FUTU_NIGHT_SESSION)
                 fund_payloads.append(
@@ -494,6 +544,7 @@ def build_futu_night_table(
                 )
                 progress.advance(success=True)
             except Exception as exc:
+                progress.set_status(f"{fund_code} {fund_name} 持仓加载失败: {exc}")
                 fund_payloads.append(
                     {
                         "_input_order": index,
@@ -540,11 +591,20 @@ def build_futu_night_table(
                 continue
 
             try:
+                progress.set_status(f"{fund_code} 获取夜盘补偿基准: {payload.get('residual_key')}")
                 residual_benchmark = _fetch_benchmark_quote(
                     payload.get("residual_key"),
                     target_date=target_date,
                     provider=provider,
                     quote_cache=quote_cache,
+                )
+                progress.set_status(
+                    (
+                        f"{fund_code} 补偿基准 -> {residual_benchmark.get('label', '')} "
+                        f"{_format_progress_return_pct(residual_benchmark.get('return_pct'))} "
+                        f"{residual_benchmark.get('source', '')} "
+                        f"{residual_benchmark.get('trade_date', '')}"
+                    ).strip()
                 )
                 residual_key = _quote_key(residual_benchmark.get("market"), residual_benchmark.get("ticker"))
                 if residual_key[0] and residual_key[1]:
@@ -559,6 +619,7 @@ def build_futu_night_table(
                     affected_funds=affected_funds,
                     fund_code=fund_code,
                     disabled_sources=disabled_sources,
+                    progress=progress,
                 )
                 rows.append(
                     {
@@ -568,6 +629,13 @@ def build_futu_night_table(
                         "estimate_return_pct": summary["estimate_return_pct"],
                         **summary,
                     }
+                )
+                progress.set_status(
+                    (
+                        f"{fund_code} 夜盘估算完成: "
+                        f"{_format_progress_return_pct(summary.get('estimate_return_pct'))} "
+                        f"status={summary.get('data_status', '')}"
+                    ).strip()
                 )
                 progress.advance(success=True)
             except Exception as exc:
@@ -592,6 +660,7 @@ def build_futu_night_table(
                         "error": str(exc),
                     }
                 )
+                progress.set_status(f"{fund_code} 夜盘估算失败: {exc}")
                 progress.advance(success=False, status=f"{fund_code} 估算失败")
 
     rows.sort(
@@ -772,6 +841,7 @@ def run_futu_night_observation(
             current_time=generated_at,
             provider=provider,
         )
+        _print_night_estimate_table(display_df, generated_at=generated_at)
         save_premarket_image(
             display_df,
             generated_at=generated_at,
