@@ -109,26 +109,29 @@ INTRADAY_START_BJ = time(INTRADAY_START_HOUR_BJ, INTRADAY_START_MINUTE_BJ)
 INTRADAY_END_BJ = time(INTRADAY_END_HOUR_BJ, INTRADAY_END_MINUTE_BJ)
 DISPLAY_RETURN_COLUMN = "盘前模型观察"
 PURCHASE_LIMIT_COLUMN = "模型观察基金信息"
-PREMARKET_FOOTER_BENCHMARK_KEYS = ("nasdaq100", "sp500", "oil_gas_ep", "gold", "vix")
-AFTERHOURS_FOOTER_BENCHMARK_KEYS = ("nasdaq100", "sp500", "oil_gas_ep", "gold", "vix")
-INTRADAY_FOOTER_BENCHMARK_KEYS = ("nasdaq100", "sp500", "oil_gas_ep", "semiconductor", "gold", "vix")
+PREMARKET_FOOTER_BENCHMARK_KEYS = ("nasdaq100", "sp500", "biotech", "oil_gas_ep", "gold", "vix")
+AFTERHOURS_FOOTER_BENCHMARK_KEYS = ("nasdaq100", "sp500", "biotech", "oil_gas_ep", "gold", "vix")
+INTRADAY_FOOTER_BENCHMARK_KEYS = ("nasdaq100", "sp500", "biotech", "oil_gas_ep", "semiconductor", "gold", "vix")
 PREMARKET_FOOTER_LABELS = {
     "nasdaq100": "纳指100（盘前数据）",
     "sp500": "标普500（盘前数据）",
+    "biotech": "生物科技（盘前数据）",
     "oil_gas_ep": "油气开采（盘前数据）",
-    "gold": "现货黄金（实时值）",
-    "vix": "VIX恐慌指数（实时值）",
+    "gold": "现货黄金（实时）",
+    "vix": "VIX恐慌指数（实时）",
 }
 AFTERHOURS_FOOTER_LABELS = {
     "nasdaq100": "纳指100（盘后数据）",
     "sp500": "标普500（盘后数据）",
+    "biotech": "生物科技（盘后数据）",
     "oil_gas_ep": "油气开采（盘后数据）",
-    "gold": "现货黄金（实时值）",
-    "vix": "VIX恐慌指数（实时值）",
+    "gold": "现货黄金（实时）",
+    "vix": "VIX恐慌指数（实时）",
 }
 INTRADAY_FOOTER_LABELS = {
     "nasdaq100": "纳指100（盘中实时）",
     "sp500": "标普500（盘中实时）",
+    "biotech": "生物科技（盘中实时）",
     "oil_gas_ep": "油气开采（盘中实时）",
     "semiconductor": "费城半导体（盘中实时）",
     "gold": "现货黄金（实时）",

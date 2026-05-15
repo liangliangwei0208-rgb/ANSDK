@@ -26,6 +26,20 @@ RESIDUAL_BENCHMARK_SPECS = {
         "aliases": {"nasdaq100", "nasdaq_100", "ndx", ".ndx", "^ndx"},
         "description": "默认海外股票持仓型基金补偿仓位基准。",
     },
+    "sp500": {
+        "label": "标普500",
+        "market": "US",
+        "ticker": ".INX",
+        "aliases": {"sp500", "s&p500", "s_and_p_500", "inx", ".inx", "^gspc", "gspc", "spx"},
+        "description": "标普500指数，作为更偏美股宽基方向基金的补偿仓位基准。",
+    },
+    "biotech_ibb": {
+        "label": "生物科技",
+        "market": "US",
+        "ticker": "IBB",
+        "aliases": {"biotech", "biotech_ibb", "ibb", "us.ibb"},
+        "description": "IBB ETF，作为生物科技方向补偿仓位代理。",
+    },
     "us_oil_gas_ep_xop": {
         "label": "美国油气开采(XOP)",
         "market": "US",
@@ -39,6 +53,10 @@ FUND_RESIDUAL_BENCHMARK_MAP = {
     "007844": "us_oil_gas_ep_xop",
     "006679": "us_oil_gas_ep_xop",  # 006679 油气勘探与生产主题基金
     "018852": "us_oil_gas_ep_xop",  # 018852 油气勘探与生产主题基金
+    "012868": "sp500",
+    "008401": "sp500",
+    "519981": "sp500",
+    "001092": "biotech_ibb",
 }
 
 

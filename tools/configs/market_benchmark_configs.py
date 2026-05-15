@@ -48,6 +48,15 @@
 MARKET_BENCHMARK_ITEMS = [
     {"enabled": True, "label": "纳斯达克100", "kind": "us_index", "ticker": ".NDX"},
     {"enabled": True, "label": "标普500", "kind": "us_index", "ticker": ".INX"},
+    {
+        "enabled": True,
+        "label": "生物科技",
+        "kind": "us_security",
+        "ticker": "IBB",
+        "display_in_daily_fund": True,
+        "display_in_holidays": False,
+        "include_in_cumulative": False,
+    },
     {"enabled": True, "label": "油气开采指数", "kind": "us_security", "ticker": "XOP"},
     {"enabled": True, "label": "费城半导体", "kind": "us_index", "ticker": ".SOX"},
     {

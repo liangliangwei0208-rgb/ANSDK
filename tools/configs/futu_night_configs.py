@@ -43,10 +43,11 @@ FUTU_NIGHT_BENCHMARK_SPECS = PREMARKET_BENCHMARK_SPECS
 FUTU_NIGHT_DEFAULT_RESIDUAL_BENCHMARK_KEY = PREMARKET_DEFAULT_RESIDUAL_BENCHMARK_KEY
 FUTU_NIGHT_FUND_RESIDUAL_BENCHMARK_MAP = PREMARKET_FUND_RESIDUAL_BENCHMARK_MAP
 
-FUTU_NIGHT_FOOTER_BENCHMARK_KEYS = ("nasdaq100", "sp500", "oil_gas_ep", "gold", "vix")
+FUTU_NIGHT_FOOTER_BENCHMARK_KEYS = ("nasdaq100", "sp500", "biotech", "oil_gas_ep", "gold", "vix")
 FUTU_NIGHT_FOOTER_LABELS = {
     "nasdaq100": "纳指100（富途夜盘）",
     "sp500": "标普500（富途夜盘）",
+    "biotech": "生物科技",
     "oil_gas_ep": "油气开采（富途夜盘）",
     "gold": "黄金ETF（富途夜盘）",
     "vix": "VIX恐慌指数（实时值）",

@@ -43,8 +43,18 @@ PREMARKET_BENCHMARK_SPECS = {
         "usable_as_residual": True,
         "description": "用 SPY 作为标普500方向盘前实时观察项。",
     },
-    "oil_gas_ep": {
+    "biotech": {
         "order": 3,
+        "label": "生物科技",
+        "market": "US",
+        "ticker": "IBB",
+        "kind": "us_security",
+        "display_in_footer": True,
+        "usable_as_residual": True,
+        "description": "用 IBB 作为生物科技方向盘前实时观察项。",
+    },
+    "oil_gas_ep": {
+        "order": 4,
         "label": "油气开采",
         "market": "US",
         "ticker": "XOP",
@@ -54,7 +64,7 @@ PREMARKET_BENCHMARK_SPECS = {
         "description": "用 XOP 作为美国油气勘探与生产方向盘前实时观察项。",
     },
     "semiconductor": {
-        "order": 4,
+        "order": 5,
         "label": "费城半导体",
         "market": "US",
         "ticker": "SMH",
@@ -64,7 +74,7 @@ PREMARKET_BENCHMARK_SPECS = {
         "description": "用 SMH 作为半导体方向盘前实时观察项。",
     },
     "gold": {
-        "order": 5,
+        "order": 6,
         "label": "黄金",
         "market": "US",
         "ticker": "GLD",
@@ -74,7 +84,7 @@ PREMARKET_BENCHMARK_SPECS = {
         "description": "用 GLD 作为黄金方向盘前实时观察项。",
     },
     "vix": {
-        "order": 6,
+        "order": 7,
         "label": "VIX恐慌指数",
         "market": "VIX_LEVEL",
         "ticker": "VIX",
@@ -93,6 +103,10 @@ PREMARKET_FUND_RESIDUAL_BENCHMARK_MAP = {
     "007844": "oil_gas_ep",
     "006679": "oil_gas_ep",
     "018852": "oil_gas_ep",
+    "012868": "sp500",
+    "008401": "sp500",
+    "519981": "sp500",
+    "001092": "biotech",
 }
 
 
