@@ -6206,7 +6206,7 @@
     "source": "calendar_failed",
     "calendar_is_open": null,
     "error": "未配置交易日历: market=UNKNOWN",
-    "fetched_at": "2026-05-15T11:40:55+08:00"
+    "fetched_at": "2026-05-15T13:25:52+08:00"
   },
   "SECURITY:US:WDC:2026-05-14": {
     "market": "US",
@@ -6278,7 +6278,7 @@
     "source": "calendar_failed",
     "calendar_is_open": null,
     "error": "未配置交易日历: market=UNKNOWN",
-    "fetched_at": "2026-05-15T11:40:55+08:00"
+    "fetched_at": "2026-05-15T13:25:52+08:00"
   },
   "SECURITY:US:ONTO:2026-05-14": {
     "market": "US",
@@ -6314,7 +6314,7 @@
     "source": "calendar_failed",
     "calendar_is_open": null,
     "error": "未配置交易日历: market=UNKNOWN",
-    "fetched_at": "2026-05-15T11:40:55+08:00"
+    "fetched_at": "2026-05-15T13:25:52+08:00"
   },
   "SECURITY:US:TXN:2026-05-14": {
     "market": "US",
@@ -6590,7 +6590,7 @@
     "source": "calendar_failed",
     "calendar_is_open": null,
     "error": "未配置交易日历: market=UNKNOWN",
-    "fetched_at": "2026-05-15T11:40:55+08:00"
+    "fetched_at": "2026-05-15T13:25:53+08:00"
   },
   "SECURITY:US:JBL:2026-05-14": {
     "market": "US",
@@ -6782,7 +6782,7 @@
     "source": "ak_stock_us_daily_trade_date_older_than_anchor",
     "calendar_is_open": true,
     "error": "trade_date=2026-05-06 与 valuation_anchor_date=2026-05-14 不一致",
-    "fetched_at": "2026-05-15T11:41:04+08:00"
+    "fetched_at": "2026-05-15T13:26:02+08:00"
   },
   "SECURITY:US:PSX:2026-05-14": {
     "market": "US",
@@ -6878,7 +6878,7 @@
     "source": "calendar_failed",
     "calendar_is_open": null,
     "error": "未配置交易日历: market=UNKNOWN",
-    "fetched_at": "2026-05-15T11:41:04+08:00"
+    "fetched_at": "2026-05-15T13:26:02+08:00"
   },
   "SECURITY:US:CAT:2026-05-14": {
     "market": "US",
@@ -7083,5 +7083,17 @@
     "calendar_is_open": true,
     "error": "",
     "fetched_at": "2026-05-15T11:41:05+08:00"
+  },
+  "SECURITY:US:IBB:2026-05-14": {
+    "market": "US",
+    "ticker": "IBB",
+    "valuation_anchor_date": "2026-05-14",
+    "trade_date": "2026-05-14",
+    "return_pct": -0.7645525629886962,
+    "status": "traded",
+    "source": "ak_stock_us_daily",
+    "calendar_is_open": true,
+    "error": "",
+    "fetched_at": "2026-05-15T13:11:29+08:00"
   }
 }

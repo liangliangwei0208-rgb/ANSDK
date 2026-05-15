@@ -39,6 +39,8 @@ from tools.configs.afterhours_configs import (
     AFTERHOURS_DEFAULT_RESIDUAL_BENCHMARK_KEY,
     AFTERHOURS_END_HOUR_BJ,
     AFTERHOURS_END_MINUTE_BJ,
+    AFTERHOURS_FOOTER_BENCHMARK_KEYS,
+    AFTERHOURS_FOOTER_LABELS,
     AFTERHOURS_FUND_RESIDUAL_BENCHMARK_MAP,
     AFTERHOURS_START_HOUR_BJ,
     AFTERHOURS_START_MINUTE_BJ,
@@ -48,6 +50,8 @@ from tools.configs.intraday_configs import (
     INTRADAY_DEFAULT_RESIDUAL_BENCHMARK_KEY,
     INTRADAY_END_HOUR_BJ,
     INTRADAY_END_MINUTE_BJ,
+    INTRADAY_FOOTER_BENCHMARK_KEYS,
+    INTRADAY_FOOTER_LABELS,
     INTRADAY_FUND_RESIDUAL_BENCHMARK_MAP,
     INTRADAY_START_HOUR_BJ,
     INTRADAY_START_MINUTE_BJ,
@@ -58,6 +62,8 @@ from tools.configs.premarket_configs import (
     PREMARKET_DEFAULT_RESIDUAL_BENCHMARK_KEY,
     PREMARKET_END_HOUR_BJ,
     PREMARKET_END_MINUTE_BJ,
+    PREMARKET_FOOTER_BENCHMARK_KEYS,
+    PREMARKET_FOOTER_LABELS,
     PREMARKET_FUND_RESIDUAL_BENCHMARK_MAP,
     PREMARKET_START_HOUR_BJ,
     PREMARKET_START_MINUTE_BJ,
@@ -109,34 +115,6 @@ INTRADAY_START_BJ = time(INTRADAY_START_HOUR_BJ, INTRADAY_START_MINUTE_BJ)
 INTRADAY_END_BJ = time(INTRADAY_END_HOUR_BJ, INTRADAY_END_MINUTE_BJ)
 DISPLAY_RETURN_COLUMN = "盘前模型观察"
 PURCHASE_LIMIT_COLUMN = "模型观察基金信息"
-PREMARKET_FOOTER_BENCHMARK_KEYS = ("nasdaq100", "sp500", "biotech", "oil_gas_ep", "gold", "vix")
-AFTERHOURS_FOOTER_BENCHMARK_KEYS = ("nasdaq100", "sp500", "biotech", "oil_gas_ep", "gold", "vix")
-INTRADAY_FOOTER_BENCHMARK_KEYS = ("nasdaq100", "sp500", "biotech", "oil_gas_ep", "semiconductor", "gold", "vix")
-PREMARKET_FOOTER_LABELS = {
-    "nasdaq100": "纳指100（盘前数据）",
-    "sp500": "标普500（盘前数据）",
-    "biotech": "生物科技（盘前数据）",
-    "oil_gas_ep": "油气开采（盘前数据）",
-    "gold": "现货黄金（实时）",
-    "vix": "VIX恐慌指数（实时）",
-}
-AFTERHOURS_FOOTER_LABELS = {
-    "nasdaq100": "纳指100（盘后数据）",
-    "sp500": "标普500（盘后数据）",
-    "biotech": "生物科技（盘后数据）",
-    "oil_gas_ep": "油气开采（盘后数据）",
-    "gold": "现货黄金（实时）",
-    "vix": "VIX恐慌指数（实时）",
-}
-INTRADAY_FOOTER_LABELS = {
-    "nasdaq100": "纳指100（盘中实时）",
-    "sp500": "标普500（盘中实时）",
-    "biotech": "生物科技（盘中实时）",
-    "oil_gas_ep": "油气开采（盘中实时）",
-    "semiconductor": "费城半导体（盘中实时）",
-    "gold": "现货黄金（实时）",
-    "vix": "VIX恐慌指数（实时）",
-}
 PREMARKET_QUOTE_CACHE_FIELDS = (
     "return_pct",
     "value",

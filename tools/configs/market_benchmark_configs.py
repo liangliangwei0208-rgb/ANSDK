@@ -24,8 +24,8 @@
 - ticker：实际请求行情用的代码。
 - fallback_ticker：可选。主 ticker 失败时使用的备用代码。
 - display_in_daily_fund：可选。是否在每日 safe 海外基金图底部基准表展示，默认 True。
-- display_in_holidays：可选。是否在节假日 / 节后观察图展示，默认 True。
-- include_in_cumulative：可选。是否作为收益率参与区间累计复利，默认 True。
+- display_in_holidays：可选。是否在节假日 / 节后单日观察图展示，默认 True。
+- include_in_cumulative：可选。是否作为收益率参与节假日 / 节后累计表复利，默认 True。
   VIX 这类点位指标必须设为 False；否则会被误当成涨跌幅。
 - final_confirm_hour_bj / final_confirm_minute_bj：可选。只建议给 "foreign_futures"
   这类接近 24 小时交易的海外期货/贵金属使用。
@@ -49,13 +49,13 @@ MARKET_BENCHMARK_ITEMS = [
     {"enabled": True, "label": "纳斯达克100", "kind": "us_index", "ticker": ".NDX"},
     {"enabled": True, "label": "标普500", "kind": "us_index", "ticker": ".INX"},
     {
-        "enabled": True,
+        "enabled": False,
         "label": "生物科技",
         "kind": "us_security",
         "ticker": "IBB",
         "display_in_daily_fund": True,
-        "display_in_holidays": False,
-        "include_in_cumulative": False,
+        "display_in_holidays": True,
+        "include_in_cumulative": True,
     },
     {"enabled": True, "label": "油气开采指数", "kind": "us_security", "ticker": "XOP"},
     {"enabled": True, "label": "费城半导体", "kind": "us_index", "ticker": ".SOX"},

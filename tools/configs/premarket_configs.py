@@ -7,6 +7,11 @@
 
 维护提示：
 - `PREMARKET_BENCHMARK_SPECS` 的 key 是内部配置名，图片只显示 `label`。
+- 实时观察图底部基准表也从这里控制：
+  - `display_in_footer` 是默认开关；
+  - `display_in_premarket_footer` / `display_in_afterhours_footer` /
+    `display_in_intraday_footer` / `display_in_futu_night_footer` 可按入口单独覆盖；
+  - `footer_labels` 可按入口指定图片里显示的名字。
 - `PREMARKET_FUND_RESIDUAL_BENCHMARK_MAP` 左边写 6 位基金代码，右边写
   `PREMARKET_BENCHMARK_SPECS` 里的 key。
 - 普通海外股票持仓基金默认使用纳指100方向补仓。
@@ -31,6 +36,12 @@ PREMARKET_BENCHMARK_SPECS = {
         "kind": "us_security",
         "display_in_footer": True,
         "usable_as_residual": True,
+        "footer_labels": {
+            "premarket": "纳指100（盘前）",
+            "afterhours": "纳指100（盘后）",
+            "intraday": "纳指100（盘中）",
+            "futu_night": "纳指100（夜盘）",
+        },
         "description": "用 QQQ 作为纳斯达克100方向盘前实时观察项。",
     },
     "sp500": {
@@ -41,6 +52,12 @@ PREMARKET_BENCHMARK_SPECS = {
         "kind": "us_security",
         "display_in_footer": True,
         "usable_as_residual": True,
+        "footer_labels": {
+            "premarket": "标普500（盘前）",
+            "afterhours": "标普500（盘后）",
+            "intraday": "标普500（盘中）",
+            "futu_night": "标普500（夜盘）",
+        },
         "description": "用 SPY 作为标普500方向盘前实时观察项。",
     },
     "biotech": {
@@ -49,8 +66,18 @@ PREMARKET_BENCHMARK_SPECS = {
         "market": "US",
         "ticker": "IBB",
         "kind": "us_security",
-        "display_in_footer": True,
+        "display_in_footer": False,
+        "display_in_premarket_footer": False,
+        "display_in_afterhours_footer": False,
+        "display_in_intraday_footer": False,
+        "display_in_futu_night_footer": False,
         "usable_as_residual": True,
+        "footer_labels": {
+            "premarket": "生物科技",
+            "afterhours": "生物科技",
+            "intraday": "生物科技",
+            "futu_night": "生物科技",
+        },
         "description": "用 IBB 作为生物科技方向盘前实时观察项。",
     },
     "oil_gas_ep": {
@@ -61,6 +88,12 @@ PREMARKET_BENCHMARK_SPECS = {
         "kind": "us_security",
         "display_in_footer": True,
         "usable_as_residual": True,
+        "footer_labels": {
+            "premarket": "油气开采（盘前）",
+            "afterhours": "油气开采（盘后）",
+            "intraday": "油气开采（盘中）",
+            "futu_night": "油气开采（夜盘）",
+        },
         "description": "用 XOP 作为美国油气勘探与生产方向盘前实时观察项。",
     },
     "semiconductor": {
@@ -70,7 +103,17 @@ PREMARKET_BENCHMARK_SPECS = {
         "ticker": "SMH",
         "kind": "us_security",
         "display_in_footer": True,
+        "display_in_premarket_footer": False,
+        "display_in_afterhours_footer": False,
+        "display_in_intraday_footer": True,
+        "display_in_futu_night_footer": False,
         "usable_as_residual": True,
+        "footer_labels": {
+            "premarket": "费城半导体（盘前）",
+            "afterhours": "费城半导体（盘后）",
+            "intraday": "费城半导体（盘中）",
+            "futu_night": "费城半导体（夜盘）",
+        },
         "description": "用 SMH 作为半导体方向盘前实时观察项。",
     },
     "gold": {
@@ -81,6 +124,12 @@ PREMARKET_BENCHMARK_SPECS = {
         "kind": "us_security",
         "display_in_footer": True,
         "usable_as_residual": True,
+        "footer_labels": {
+            "premarket": "现货黄金（实时）",
+            "afterhours": "现货黄金（实时）",
+            "intraday": "现货黄金（实时）",
+            "futu_night": "黄金ETF（实时）",
+        },
         "description": "用 GLD 作为黄金方向盘前实时观察项。",
     },
     "vix": {
@@ -91,6 +140,12 @@ PREMARKET_BENCHMARK_SPECS = {
         "kind": "vix_level",
         "display_in_footer": True,
         "usable_as_residual": False,
+        "footer_labels": {
+            "premarket": "VIX恐慌指数（实时）",
+            "afterhours": "VIX恐慌指数（实时）",
+            "intraday": "VIX恐慌指数（实时）",
+            "futu_night": "VIX恐慌指数（实时）",
+        },
         "description": "VIX 是点位观察项，不作为补仓收益率基准。",
     },
 }
@@ -110,12 +165,79 @@ PREMARKET_FUND_RESIDUAL_BENCHMARK_MAP = {
 }
 
 
+def _footer_enabled_for_session(spec: dict, session: str) -> bool:
+    flag = f"display_in_{session}_footer"
+    if flag in spec:
+        return bool(spec.get(flag))
+    return bool(spec.get("display_in_footer", True))
+
+
+def _footer_order_for_session(spec: dict, session: str) -> int:
+    raw_value = spec.get(f"{session}_order", spec.get("order", 999))
+    try:
+        return int(raw_value)
+    except Exception:
+        return 999
+
+
+def build_observation_footer_benchmark_keys(session: str) -> tuple[str, ...]:
+    session_norm = str(session or "").strip().lower()
+    rows = []
+    for key, spec in PREMARKET_BENCHMARK_SPECS.items():
+        if not isinstance(spec, dict):
+            continue
+        if not _footer_enabled_for_session(spec, session_norm):
+            continue
+        rows.append((_footer_order_for_session(spec, session_norm), str(key)))
+    return tuple(key for _, key in sorted(rows, key=lambda item: (item[0], item[1])))
+
+
+def build_observation_footer_labels(session: str) -> dict[str, str]:
+    session_norm = str(session or "").strip().lower()
+    labels: dict[str, str] = {}
+    for key in build_observation_footer_benchmark_keys(session_norm):
+        spec = PREMARKET_BENCHMARK_SPECS.get(key, {})
+        footer_labels = spec.get("footer_labels") if isinstance(spec, dict) else None
+        label = ""
+        if isinstance(footer_labels, dict):
+            label = str(footer_labels.get(session_norm, "")).strip()
+        if not label and isinstance(spec, dict):
+            label = str(
+                spec.get(f"{session_norm}_footer_label")
+                or spec.get("footer_label")
+                or spec.get("label")
+                or key
+            ).strip()
+        labels[key] = label or key
+    return labels
+
+
+PREMARKET_FOOTER_BENCHMARK_KEYS = build_observation_footer_benchmark_keys("premarket")
+PREMARKET_FOOTER_LABELS = build_observation_footer_labels("premarket")
+AFTERHOURS_FOOTER_BENCHMARK_KEYS = build_observation_footer_benchmark_keys("afterhours")
+AFTERHOURS_FOOTER_LABELS = build_observation_footer_labels("afterhours")
+INTRADAY_FOOTER_BENCHMARK_KEYS = build_observation_footer_benchmark_keys("intraday")
+INTRADAY_FOOTER_LABELS = build_observation_footer_labels("intraday")
+FUTU_NIGHT_FOOTER_BENCHMARK_KEYS = build_observation_footer_benchmark_keys("futu_night")
+FUTU_NIGHT_FOOTER_LABELS = build_observation_footer_labels("futu_night")
+
+
 __all__ = [
+    "AFTERHOURS_FOOTER_BENCHMARK_KEYS",
+    "AFTERHOURS_FOOTER_LABELS",
+    "FUTU_NIGHT_FOOTER_BENCHMARK_KEYS",
+    "FUTU_NIGHT_FOOTER_LABELS",
+    "INTRADAY_FOOTER_BENCHMARK_KEYS",
+    "INTRADAY_FOOTER_LABELS",
     "PREMARKET_BENCHMARK_SPECS",
     "PREMARKET_DEFAULT_RESIDUAL_BENCHMARK_KEY",
     "PREMARKET_END_HOUR_BJ",
     "PREMARKET_END_MINUTE_BJ",
+    "PREMARKET_FOOTER_BENCHMARK_KEYS",
+    "PREMARKET_FOOTER_LABELS",
     "PREMARKET_FUND_RESIDUAL_BENCHMARK_MAP",
     "PREMARKET_START_HOUR_BJ",
     "PREMARKET_START_MINUTE_BJ",
+    "build_observation_footer_benchmark_keys",
+    "build_observation_footer_labels",
 ]
