@@ -7571,13 +7571,13 @@
     "market": "HK",
     "ticker": "02513",
     "valuation_anchor_date": "2026-05-15",
-    "trade_date": "",
-    "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "trade_date": "2026-05-15",
+    "return_pct": -4.587155963302747,
+    "status": "traded",
+    "source": "ak_stock_hk_daily_sina_qfq_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-15T17:08:46+08:00"
+    "fetched_at": "2026-05-15T23:00:19+08:00"
   },
   "SECURITY:US:KLAC:2026-05-15": {
     "market": "US",
@@ -7595,25 +7595,25 @@
     "market": "HK",
     "ticker": "09899",
     "valuation_anchor_date": "2026-05-15",
-    "trade_date": "",
-    "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "trade_date": "2026-05-15",
+    "return_pct": 0.7716048787342,
+    "status": "traded",
+    "source": "ak_stock_hk_daily_sina_qfq_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-15T17:08:47+08:00"
+    "fetched_at": "2026-05-15T23:00:20+08:00"
   },
   "SECURITY:HK:00522:2026-05-15": {
     "market": "HK",
     "ticker": "00522",
     "valuation_anchor_date": "2026-05-15",
-    "trade_date": "",
-    "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "trade_date": "2026-05-15",
+    "return_pct": -0.17411491584445882,
+    "status": "traded",
+    "source": "ak_stock_hk_daily_sina_qfq_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-15T17:08:47+08:00"
+    "fetched_at": "2026-05-15T23:00:21+08:00"
   },
   "SECURITY:KR:000660:2026-05-15": {
     "market": "KR",
@@ -7775,25 +7775,25 @@
     "market": "HK",
     "ticker": "00981",
     "valuation_anchor_date": "2026-05-15",
-    "trade_date": "",
-    "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "trade_date": "2026-05-15",
+    "return_pct": -0.4895104895104807,
+    "status": "traded",
+    "source": "ak_stock_hk_daily_sina_qfq_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-15T17:08:57+08:00"
+    "fetched_at": "2026-05-15T23:00:22+08:00"
   },
   "SECURITY:HK:01347:2026-05-15": {
     "market": "HK",
     "ticker": "01347",
     "valuation_anchor_date": "2026-05-15",
-    "trade_date": "",
-    "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "trade_date": "2026-05-15",
+    "return_pct": -8.74015748031496,
+    "status": "traded",
+    "source": "ak_stock_hk_daily_sina_qfq_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-15T17:08:57+08:00"
+    "fetched_at": "2026-05-15T23:00:23+08:00"
   },
   "SECURITY:US:TXN:2026-05-15": {
     "market": "US",
@@ -7823,13 +7823,13 @@
     "market": "HK",
     "ticker": "09988",
     "valuation_anchor_date": "2026-05-15",
-    "trade_date": "",
-    "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "trade_date": "2026-05-15",
+    "return_pct": -4.060913705583758,
+    "status": "traded",
+    "source": "ak_stock_hk_daily_sina_qfq_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-15T17:09:02+08:00"
+    "fetched_at": "2026-05-15T23:00:25+08:00"
   },
   "SECURITY:CN:688256:2026-05-15": {
     "market": "CN",
@@ -7979,25 +7979,25 @@
     "market": "HK",
     "ticker": "01088",
     "valuation_anchor_date": "2026-05-15",
-    "trade_date": "",
-    "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "trade_date": "2026-05-15",
+    "return_pct": 0.22542831379621653,
+    "status": "traded",
+    "source": "ak_stock_hk_daily_sina_qfq_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-15T17:09:00+08:00"
+    "fetched_at": "2026-05-15T23:00:26+08:00"
   },
   "SECURITY:HK:00883:2026-05-15": {
     "market": "HK",
     "ticker": "00883",
     "valuation_anchor_date": "2026-05-15",
-    "trade_date": "",
-    "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "trade_date": "2026-05-15",
+    "return_pct": 0.22761760242793194,
+    "status": "traded",
+    "source": "ak_stock_hk_daily_sina_qfq_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-15T17:09:02+08:00"
+    "fetched_at": "2026-05-15T23:00:27+08:00"
   },
   "SECURITY:US:COP:2026-05-15": {
     "market": "US",
@@ -8399,25 +8399,25 @@
     "market": "HK",
     "ticker": "01179",
     "valuation_anchor_date": "2026-05-15",
-    "trade_date": "",
-    "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "trade_date": "2026-05-15",
+    "return_pct": -2.043070127001667,
+    "status": "traded",
+    "source": "ak_stock_hk_daily_sina_qfq_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-15T17:09:02+08:00"
+    "fetched_at": "2026-05-15T23:00:36+08:00"
   },
   "SECURITY:HK:00700:2026-05-15": {
     "market": "HK",
     "ticker": "00700",
     "valuation_anchor_date": "2026-05-15",
-    "trade_date": "",
-    "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "trade_date": "2026-05-15",
+    "return_pct": 0.32974280061552896,
+    "status": "traded",
+    "source": "ak_stock_hk_daily_sina_qfq_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-15T17:09:02+08:00"
+    "fetched_at": "2026-05-15T23:00:37+08:00"
   },
   "SECURITY:US:FUTU:2026-05-15": {
     "market": "US",
@@ -8435,25 +8435,25 @@
     "market": "HK",
     "ticker": "00100",
     "valuation_anchor_date": "2026-05-15",
-    "trade_date": "",
-    "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "trade_date": "2026-05-15",
+    "return_pct": -6.58823529411765,
+    "status": "traded",
+    "source": "ak_stock_hk_daily_sina_qfq_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-15T17:09:03+08:00"
+    "fetched_at": "2026-05-15T23:00:48+08:00"
   },
   "SECURITY:HK:06869:2026-05-15": {
     "market": "HK",
     "ticker": "06869",
     "valuation_anchor_date": "2026-05-15",
-    "trade_date": "",
-    "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "trade_date": "2026-05-15",
+    "return_pct": -12.13553979511427,
+    "status": "traded",
+    "source": "ak_stock_hk_daily_sina_qfq_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-15T17:09:03+08:00"
+    "fetched_at": "2026-05-15T23:00:50+08:00"
   },
   "SECURITY:CN:688519:2026-05-15": {
     "market": "CN",
@@ -8555,13 +8555,13 @@
     "market": "HK",
     "ticker": "03750",
     "valuation_anchor_date": "2026-05-15",
-    "trade_date": "",
-    "return_pct": 0.0,
-    "status": "pending",
-    "source": "market_close_not_confirmed",
+    "trade_date": "2026-05-15",
+    "return_pct": -0.8746355685131157,
+    "status": "traded",
+    "source": "ak_stock_hk_daily_sina_qfq_close_calc",
     "calendar_is_open": true,
     "error": "",
-    "fetched_at": "2026-05-15T17:09:06+08:00"
+    "fetched_at": "2026-05-15T23:00:52+08:00"
   },
   "SECURITY:US:HD:2026-05-15": {
     "market": "US",

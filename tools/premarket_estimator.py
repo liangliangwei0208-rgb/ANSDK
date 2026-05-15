@@ -2310,7 +2310,7 @@ def _fetch_hk_return_pct_tencent(code: str, *, timeout: int = 6) -> dict[str, An
         raise RuntimeError(f"腾讯港股无法解析涨跌幅: {hk_code}")
 
     quote_time = ""
-    trade_date = now_bj().date().isoformat()
+    trade_date = ""
     if len(values) > 30 and str(values[30]).strip():
         quote_time = str(values[30]).strip()
         date_text = quote_time.split()[0].replace("/", "-")
@@ -2568,6 +2568,75 @@ def _afterhours_non_us_zero_return(market: str, ticker: str, *, valuation_date: 
     }
 
 
+def _mark_non_us_realtime_anchor_fallback(item: dict[str, Any], *, anchor_error: Exception) -> dict[str, Any]:
+    """Tag a pre/intraday non-US quote that replaced an unavailable same-day daily bar."""
+    out = dict(item)
+    source = str(out.get("source") or "realtime").strip()
+    if "anchor_fallback" not in source:
+        out["source"] = f"{source}_anchor_fallback"
+    out["status"] = str(out.get("status") or "traded").strip().lower() or "traded"
+    out["error"] = (
+        "锚点日线未确认，使用实时/近收盘行情兜底: "
+        f"{anchor_error}"
+    )
+    return out
+
+
+def _fetch_non_us_realtime_anchor_fallback(
+    market: str,
+    ticker: str,
+    *,
+    target_date: str,
+    disabled_sources: set[str],
+    anchor_error: Exception,
+) -> dict[str, Any]:
+    market_norm = str(market or "").strip().upper()
+    ticker_norm = str(ticker or "").strip().upper()
+    try:
+        if market_norm == "CN":
+            item = _fetch_cn_realtime_return_with_date(ticker_norm, target_date=target_date)
+        elif market_norm == "HK":
+            item = _fetch_hk_realtime_return_with_date(
+                ticker_norm,
+                target_date=target_date,
+                disabled_sources=disabled_sources,
+            )
+        elif market_norm == "KR":
+            item = _fetch_kr_realtime_return_with_date(ticker_norm, target_date=target_date)
+        else:
+            raise RuntimeError(f"不支持的非美实时兜底市场: {market_norm}")
+    except Exception as realtime_exc:
+        raise RuntimeError(
+            f"锚点日线无有效数据且实时/近收盘兜底失败: daily={anchor_error}; realtime={realtime_exc}"
+        ) from realtime_exc
+    return _mark_non_us_realtime_anchor_fallback(item, anchor_error=anchor_error)
+
+
+def _fetch_non_us_anchor_or_realtime_return(
+    market: str,
+    ticker: str,
+    *,
+    target_date: str,
+    disabled_sources: set[str],
+    as_of_bj: datetime | str | None = None,
+) -> dict[str, Any]:
+    try:
+        return _fetch_anchor_daily_return(
+            market,
+            ticker,
+            target_date=target_date,
+            as_of_bj=as_of_bj,
+        )
+    except Exception as anchor_exc:
+        return _fetch_non_us_realtime_anchor_fallback(
+            market,
+            ticker,
+            target_date=target_date,
+            disabled_sources=disabled_sources,
+            anchor_error=anchor_exc,
+        )
+
+
 def fetch_holding_current_return(
     market: str,
     ticker: str,
@@ -2601,10 +2670,11 @@ def fetch_holding_current_return(
             as_of_bj=as_of_bj,
         )
     if quote_mode in {"premarket", "intraday"} and market_norm in {"CN", "HK", "KR"}:
-        return _fetch_anchor_daily_return(
+        return _fetch_non_us_anchor_or_realtime_return(
             market_norm,
             ticker_norm,
             target_date=today,
+            disabled_sources=disabled_sources,
             as_of_bj=as_of_bj,
         )
     if market_norm == "CN":
