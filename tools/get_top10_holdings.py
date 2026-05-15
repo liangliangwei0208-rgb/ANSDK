@@ -1239,6 +1239,187 @@ def _cached_index_tuple(item):
         item.get("source", "file_cache"),
     )
 
+
+def _security_return_runtime_record(cache_key: str) -> dict | None:
+    """
+    读取本轮内存行情缓存，并兼容旧的二元 tuple 写法。
+
+    `_SECURITY_RETURN_RUNTIME_CACHE` 同时承载普通行情和锚点行情。普通行情
+    使用非 `SECURITY:` key；这里仅把普通行情恢复成 dict，便于统一校验
+    trade_date / fetched_at。
+    """
+    item = _SECURITY_RETURN_RUNTIME_CACHE.get(cache_key)
+    if isinstance(item, dict):
+        return dict(item)
+    if isinstance(item, (tuple, list)) and len(item) >= 2:
+        record = {
+            "return_pct": item[0],
+            "source": item[1],
+            "fetched_at": datetime.now().isoformat(timespec="seconds"),
+        }
+        if len(item) >= 3:
+            record["trade_date"] = item[2]
+        return record
+    return None
+
+
+def _trade_date_security_cache_usable(
+    item: dict,
+    *,
+    market: str,
+    max_age_hours: float | None,
+    target_date=None,
+) -> bool:
+    """判断带交易日的普通行情缓存是否可直接用于当前估值目标。"""
+    if not isinstance(item, dict):
+        return False
+    market_norm = str(market or "").strip().upper()
+    if not item.get("trade_date") and market_norm in {"CN", "HK", "KR"}:
+        return False
+    if not _should_use_trade_date_cache_without_refresh(
+        item,
+        max_age_hours=max_age_hours,
+        target_date=target_date,
+    ):
+        return False
+    cached_trade_date = _normalize_trade_date_key(item.get("trade_date", ""))
+    return not (
+        market_norm in {"CN", "HK", "KR"}
+        and _trade_date_is_after_target(cached_trade_date, target_date)
+    )
+
+
+def _security_cache_result_for_target(
+    item: dict,
+    *,
+    market: str,
+    target_date=None,
+) -> tuple[tuple[float, str], str]:
+    """
+    从普通行情缓存恢复返回值，并按 KR 节假日置零策略做最终口径调整。
+
+    文件缓存保存原始行情，KR 的节假日置零只作用于返回值，避免污染同一
+    交易日稍后面向其他估值目标的计算。
+    """
+    result = _cached_return_tuple(item)
+    trade_date = _normalize_trade_date_key(item.get("trade_date", ""))
+    if str(market or "").strip().upper() == "KR":
+        zero_r_pct, zero_trade_date, zero_source = _apply_kr_holiday_zero_policy(
+            result[0],
+            trade_date,
+            result[1],
+            target_date=target_date,
+        )
+        result = (float(zero_r_pct), zero_source)
+        trade_date = _normalize_trade_date_key(zero_trade_date)
+    return result, trade_date
+
+
+def _get_runtime_security_return_cache(
+    cache_key: str,
+    *,
+    market: str,
+    ticker: str,
+    needs_trade_date_cache: bool,
+    max_age_hours: float | None,
+    target_date=None,
+) -> tuple[float, str, str] | None:
+    """返回本轮普通行情缓存命中结果；未命中或校验失败时返回 None。"""
+    item = _security_return_runtime_record(cache_key)
+    if not isinstance(item, dict):
+        return None
+
+    market_norm = str(market or "").strip().upper()
+    ticker_norm = str(ticker or "").strip().upper()
+    if needs_trade_date_cache:
+        if not _trade_date_security_cache_usable(
+            item,
+            market=market_norm,
+            max_age_hours=max_age_hours,
+            target_date=target_date,
+        ):
+            return None
+        result, trade_date = _security_cache_result_for_target(
+            item,
+            market=market_norm,
+            target_date=target_date,
+        )
+        _cache_log(f"使用本轮内存行情缓存: {cache_key} -> {result[0]:+.4f}% trade_date={trade_date}")
+        record_market_event(
+            action="security_cache",
+            source="runtime_trade_date_cache",
+            market=market_norm,
+            ticker=ticker_norm,
+            outcome="cache_hit",
+            cache_hit=True,
+            status=str(item.get("status", "")),
+        )
+        return result[0], result[1], trade_date
+
+    result = _cached_return_tuple(item)
+    trade_date = _normalize_trade_date_key(item.get("trade_date", ""))
+    _cache_log(f"使用本轮内存行情缓存: {cache_key}")
+    record_market_event(
+        action="security_cache",
+        source="runtime_hourly_cache",
+        market=market_norm,
+        ticker=ticker_norm,
+        outcome="cache_hit",
+        cache_hit=True,
+    )
+    return result[0], result[1], trade_date
+
+
+def _remember_runtime_security_return_cache(cache_key: str, item: dict) -> None:
+    """把普通行情缓存项写入本轮内存缓存。"""
+    if cache_key and isinstance(item, dict):
+        _SECURITY_RETURN_RUNTIME_CACHE[cache_key] = dict(item)
+
+
+def _get_fresh_anchor_cache_entry(
+    cache_key: str,
+    *,
+    market: str,
+    ticker: str,
+    record_action: str | None = None,
+) -> dict | None:
+    """统一读取锚点类 runtime/file cache，保持原有 fresh 判定不变。"""
+    market_norm = str(market or "").strip().upper()
+    ticker_norm = str(ticker or "").strip().upper()
+
+    cached = _SECURITY_RETURN_RUNTIME_CACHE.get(cache_key)
+    if isinstance(cached, dict) and _is_anchor_cache_entry_fresh(cached):
+        if record_action:
+            record_market_event(
+                action=record_action,
+                source="runtime_anchor_cache",
+                market=market_norm,
+                ticker=ticker_norm,
+                outcome="cache_hit",
+                cache_hit=True,
+                status=str(cached.get("status", "")),
+            )
+        return dict(cached)
+
+    cache = _load_json_cache(SECURITY_RETURN_CACHE_FILE, default={})
+    item = cache.get(cache_key) if isinstance(cache, dict) else None
+    if isinstance(item, dict) and _is_anchor_cache_entry_fresh(item):
+        _SECURITY_RETURN_RUNTIME_CACHE[cache_key] = dict(item)
+        if record_action:
+            record_market_event(
+                action=record_action,
+                source="file_anchor_cache",
+                market=market_norm,
+                ticker=ticker_norm,
+                outcome="cache_hit",
+                cache_hit=True,
+                status=str(item.get("status", "")),
+            )
+        return dict(item)
+
+    return None
+
+
 def _df_to_cache_json(df: pd.DataFrame) -> str:
     """
     DataFrame 序列化为 JSON 字符串。
@@ -3620,69 +3801,66 @@ def get_stock_return_pct(
         cache_key, ticker_norm, max_age_hours = _security_return_cache_key(market=market, ticker=ticker, cn_hk_hourly_cache=effective_cn_hk_hourly_cache)
         cache_key = f"{cache_key}:{valuation_mode}"
 
-        if cache_key in _SECURITY_RETURN_RUNTIME_CACHE and not needs_trade_date_cache:
-            _cache_log(f"使用本轮内存行情缓存: {cache_key}")
-            record_market_event(
-                action="security_cache",
-                source="runtime_hourly_cache",
-                market=market,
-                ticker=ticker_norm or ticker,
-                outcome="cache_hit",
-                cache_hit=True,
-            )
-            result = _SECURITY_RETURN_RUNTIME_CACHE[cache_key]
+        runtime_hit = _get_runtime_security_return_cache(
+            cache_key,
+            market=market,
+            ticker=ticker_norm or ticker,
+            needs_trade_date_cache=needs_trade_date_cache,
+            max_age_hours=max_age_hours,
+            target_date=stale_market_estimate_date,
+        )
+        if runtime_hit is not None:
             if return_trade_date:
-                return float(result[0]), result[1], ""
-            return result
+                return runtime_hit
+            return runtime_hit[0], runtime_hit[1]
 
         cache = _load_json_cache(SECURITY_RETURN_CACHE_FILE, default={})
-        item = cache.get(cache_key)
-        if item:
+        item = cache.get(cache_key) if isinstance(cache, dict) else None
+        if isinstance(item, dict):
             try:
                 if needs_trade_date_cache:
-                    # 节假日防重复估值依赖 trade_date，缺失时必须刷新一次。
-                    if not item.get("trade_date") and market in {"CN", "HK", "KR"}:
-                        pass
-                    elif _should_use_trade_date_cache_without_refresh(
+                    if _trade_date_security_cache_usable(
                         item,
+                        market=market,
                         max_age_hours=max_age_hours,
                         target_date=stale_market_estimate_date,
                     ):
-                        result = _cached_return_tuple(item)
-                        cached_trade_date = _normalize_trade_date_key(item.get("trade_date", ""))
-                        if market in {"CN", "HK", "KR"} and _trade_date_is_after_target(cached_trade_date, stale_market_estimate_date):
-                            _cache_log(
-                                f"跳过晚于目标估值日的行情缓存: {cache_key}, "
-                                f"cached_trade_date={cached_trade_date}, target={_normalize_trade_date_key(stale_market_estimate_date)}"
-                            )
-                        else:
-                            if market == "KR":
-                                zero_r_pct, zero_trade_date, zero_source = _apply_kr_holiday_zero_policy(
-                                    result[0],
-                                    cached_trade_date,
-                                    result[1],
-                                    target_date=stale_market_estimate_date,
-                                )
-                                result = (float(zero_r_pct), zero_source)
-                                cached_trade_date = _normalize_trade_date_key(zero_trade_date)
-                            _SECURITY_RETURN_RUNTIME_CACHE[cache_key] = result
-                            _cache_log(f"使用文件行情缓存: {cache_key} -> {result[0]:+.4f}% trade_date={cached_trade_date}")
-                            record_market_event(
-                                action="security_cache",
-                                source="file_trade_date_cache",
-                                market=market,
-                                ticker=ticker_norm,
-                                outcome="cache_hit",
-                                cache_hit=True,
-                                status=str(item.get("status", "")),
-                            )
-                            if return_trade_date:
-                                return result[0], result[1], cached_trade_date
-                            return result
+                        result, cached_trade_date = _security_cache_result_for_target(
+                            item,
+                            market=market,
+                            target_date=stale_market_estimate_date,
+                        )
+                        _remember_runtime_security_return_cache(cache_key, item)
+                        _cache_log(f"使用文件行情缓存: {cache_key} -> {result[0]:+.4f}% trade_date={cached_trade_date}")
+                        record_market_event(
+                            action="security_cache",
+                            source="file_trade_date_cache",
+                            market=market,
+                            ticker=ticker_norm,
+                            outcome="cache_hit",
+                            cache_hit=True,
+                            status=str(item.get("status", "")),
+                        )
+                        if return_trade_date:
+                            return result[0], result[1], cached_trade_date
+                        return result
+                    cached_trade_date = _normalize_trade_date_key(item.get("trade_date", ""))
+                    if market in {"CN", "HK", "KR"} and _trade_date_is_after_target(
+                        cached_trade_date,
+                        stale_market_estimate_date,
+                    ):
+                        _cache_log(
+                            f"跳过晚于目标估值日的行情缓存: {cache_key}, "
+                            f"cached_trade_date={cached_trade_date}, target={_normalize_trade_date_key(stale_market_estimate_date)}"
+                        )
                 else:
                     if _is_cache_fresh(item.get("fetched_at"), max_age_hours=max_age_hours):
-                        result = (float(item["return_pct"]), item.get("source", "file_cache"))
-                        _SECURITY_RETURN_RUNTIME_CACHE[cache_key] = result
+                        result, cached_trade_date = _security_cache_result_for_target(
+                            item,
+                            market=market,
+                            target_date=stale_market_estimate_date,
+                        )
+                        _remember_runtime_security_return_cache(cache_key, item)
                         _cache_log(f"使用文件行情缓存: {cache_key} -> {result[0]:+.4f}%")
                         record_market_event(
                             action="security_cache",
@@ -3693,7 +3871,7 @@ def get_stock_return_pct(
                             cache_hit=True,
                         )
                         if return_trade_date:
-                            return result[0], result[1], _normalize_trade_date_key(item.get("trade_date", ""))
+                            return result[0], result[1], cached_trade_date
                         return result
             except Exception:
                 pass
@@ -3718,6 +3896,7 @@ def get_stock_return_pct(
                             old_entry = _mark_last_close_cache_checked(dict(item))
                             cache[cache_key] = old_entry
                             _save_security_return_cache(cache)
+                            _remember_runtime_security_return_cache(cache_key, old_entry)
                         result = _cached_return_tuple(item)
                         if return_trade_date:
                             return result[0], result[1], _normalize_trade_date_key(item.get("trade_date", ""))
@@ -3771,6 +3950,7 @@ def get_stock_return_pct(
                 old_entry = _mark_last_close_cache_checked(dict(item))
                 cache[cache_key] = old_entry
                 _save_security_return_cache(cache)
+                _remember_runtime_security_return_cache(cache_key, old_entry)
             except Exception:
                 pass
             result = _cached_return_tuple(item)
@@ -3819,7 +3999,7 @@ def get_stock_return_pct(
             entry = _mark_last_close_cache_checked(entry)
         cache[cache_key] = entry
         _save_security_return_cache(cache)
-        _SECURITY_RETURN_RUNTIME_CACHE[cache_key] = raw_result_for_cache
+        _remember_runtime_security_return_cache(cache_key, entry)
 
     if return_trade_date:
         return float(result[0]), result[1], return_trade_date_final
@@ -4016,33 +4196,14 @@ def get_security_return_by_anchor_date(
         raise ValueError("海外/全球基金锚点估算不允许 allow_intraday=True")
 
     if security_return_cache_enabled:
-        cached = _SECURITY_RETURN_RUNTIME_CACHE.get(cache_key)
-        if isinstance(cached, dict) and _is_anchor_cache_entry_fresh(cached):
-            record_market_event(
-                action="anchor_cache",
-                source="runtime_anchor_cache",
-                market=market_norm,
-                ticker=ticker_norm,
-                outcome="cache_hit",
-                cache_hit=True,
-                status=str(cached.get("status", "")),
-            )
-            return dict(cached)
-
-        cache = _load_json_cache(SECURITY_RETURN_CACHE_FILE, default={})
-        item = cache.get(cache_key) if isinstance(cache, dict) else None
-        if isinstance(item, dict) and _is_anchor_cache_entry_fresh(item):
-            _SECURITY_RETURN_RUNTIME_CACHE[cache_key] = dict(item)
-            record_market_event(
-                action="anchor_cache",
-                source="file_anchor_cache",
-                market=market_norm,
-                ticker=ticker_norm,
-                outcome="cache_hit",
-                cache_hit=True,
-                status=str(item.get("status", "")),
-            )
-            return dict(item)
+        cached = _get_fresh_anchor_cache_entry(
+            cache_key,
+            market=market_norm,
+            ticker=ticker_norm,
+            record_action="anchor_cache",
+        )
+        if cached is not None:
+            return cached
 
     try:
         schedule = _market_schedule(market_norm, anchor, anchor)
@@ -4299,15 +4460,13 @@ def _get_vix_level_by_anchor_date(symbol, valuation_anchor_date, cache_enabled=T
     cache_key, ticker_norm, anchor = _anchor_security_cache_key("VIX_LEVEL", symbol, valuation_anchor_date)
 
     if cache_enabled and anchor:
-        cached = _SECURITY_RETURN_RUNTIME_CACHE.get(cache_key)
-        if isinstance(cached, dict) and _is_anchor_cache_entry_fresh(cached):
-            return dict(cached)
-
-        cache = _load_json_cache(SECURITY_RETURN_CACHE_FILE, default={})
-        item = cache.get(cache_key) if isinstance(cache, dict) else None
-        if isinstance(item, dict) and _is_anchor_cache_entry_fresh(item):
-            _SECURITY_RETURN_RUNTIME_CACHE[cache_key] = dict(item)
-            return dict(item)
+        cached = _get_fresh_anchor_cache_entry(
+            cache_key,
+            market="VIX_LEVEL",
+            ticker=ticker_norm,
+        )
+        if cached is not None:
+            return cached
 
     try:
         latest = fetch_latest_complete_vix_close()
@@ -6674,15 +6833,13 @@ def _get_yahoo_benchmark_return_by_anchor_date(symbol, valuation_anchor_date, ca
         )
 
     if cache_enabled:
-        cached = _SECURITY_RETURN_RUNTIME_CACHE.get(cache_key)
-        if isinstance(cached, dict) and _is_anchor_cache_entry_fresh(cached):
-            return dict(cached)
-
-        cache = _load_json_cache(SECURITY_RETURN_CACHE_FILE, default={})
-        item = cache.get(cache_key) if isinstance(cache, dict) else None
-        if isinstance(item, dict) and _is_anchor_cache_entry_fresh(item):
-            _SECURITY_RETURN_RUNTIME_CACHE[cache_key] = dict(item)
-            return dict(item)
+        cached = _get_fresh_anchor_cache_entry(
+            cache_key,
+            market="YAHOO",
+            ticker=ticker_norm,
+        )
+        if cached is not None:
+            return cached
 
     try:
         return_pct, trade_date, source = fetch_us_stock_return_pct_yahoo_daily_with_date(
@@ -6753,15 +6910,13 @@ def _get_foreign_futures_benchmark_return_by_anchor_date(
         )
 
     if cache_enabled:
-        cached = _SECURITY_RETURN_RUNTIME_CACHE.get(cache_key)
-        if isinstance(cached, dict) and _is_anchor_cache_entry_fresh(cached):
-            return dict(cached)
-
-        cache = _load_json_cache(SECURITY_RETURN_CACHE_FILE, default={})
-        item = cache.get(cache_key) if isinstance(cache, dict) else None
-        if isinstance(item, dict) and _is_anchor_cache_entry_fresh(item):
-            _SECURITY_RETURN_RUNTIME_CACHE[cache_key] = dict(item)
-            return dict(item)
+        cached = _get_fresh_anchor_cache_entry(
+            cache_key,
+            market="FOREIGN_FUTURES",
+            ticker=ticker_norm,
+        )
+        if cached is not None:
+            return cached
 
     try:
         return_pct, trade_date, source = fetch_foreign_futures_return_pct_with_date(

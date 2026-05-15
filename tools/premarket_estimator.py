@@ -1260,6 +1260,104 @@ def _validate_intraday_us_quote_item(
     )
 
 
+def _drop_observation_quote_cache(
+    quote_cache: dict[tuple[str, str], dict[str, Any]],
+    persistent_quote_cache: dict[str, dict[str, Any]] | None,
+    *,
+    market: Any,
+    ticker: Any,
+) -> None:
+    """同时失效本轮短缓存和文件短缓存中的同一行情项。"""
+    quote_cache.pop(_premarket_quote_tuple_key(market, ticker), None)
+    if persistent_quote_cache is not None:
+        persistent_quote_cache.pop(_premarket_quote_cache_key(market, ticker), None)
+
+
+def _get_valid_cached_observation_quote(
+    quote_cache: dict[tuple[str, str], dict[str, Any]],
+    persistent_quote_cache: dict[str, dict[str, Any]] | None,
+    *,
+    market: Any,
+    ticker: Any,
+    today: str,
+    cache_now: datetime,
+    session: ObservationSessionConfig,
+    kind: str = "",
+) -> dict[str, Any] | None:
+    """
+    读取并校验盘前/盘中/盘后短缓存。
+
+    同一套规则服务持仓和 footer 基准：缓存必须在 TTL 内，且美股缓存还要
+    匹配当前观察入口的 pre/regular/post 口径和目标美股日期。
+    """
+    market_norm = str(market or "").strip().upper()
+    ticker_norm = str(ticker or "").strip().upper()
+    item = _get_cached_premarket_quote(
+        quote_cache,
+        persistent_quote_cache,
+        market=market_norm,
+        ticker=ticker_norm,
+        cache_now=cache_now,
+        ttl_minutes=session.quote_cache_ttl_minutes,
+    )
+    if not isinstance(item, dict) or not (_quote_item_has_value(item) or item.get("status") == "missing"):
+        return None
+
+    source_lower = str(item.get("source", "") or "").lower()
+    if (
+        str(kind).strip().lower() == "vix_level"
+        and str(item.get("cache_hit", "")).lower() == "file"
+        and "realtime" not in source_lower
+    ):
+        return None
+
+    mode = str(session.us_quote_mode).lower()
+    if market_norm == "US" and _quote_item_has_value(item):
+        try:
+            if mode == "afterhours":
+                return _validate_afterhours_us_quote_item(
+                    item,
+                    target_us_date=_target_afterhours_us_date(cache_now),
+                    symbol=ticker_norm,
+                    source="afterhours_cache",
+                )
+            if mode == "premarket":
+                return _validate_premarket_us_quote_item(
+                    item,
+                    target_us_date=_target_intraday_us_date(cache_now),
+                    symbol=ticker_norm,
+                    source="premarket_cache",
+                )
+            if mode == "intraday":
+                return _validate_intraday_us_quote_item(
+                    item,
+                    target_us_date=_target_intraday_us_date(cache_now),
+                    symbol=ticker_norm,
+                    source="intraday_cache",
+                )
+        except Exception:
+            _drop_observation_quote_cache(
+                quote_cache,
+                persistent_quote_cache,
+                market=market_norm,
+                ticker=ticker_norm,
+            )
+            return None
+
+    if mode in {"premarket", "intraday"} and market_norm in {"CN", "HK", "KR"}:
+        cached_trade_date = str(item.get("trade_date") or "").strip()
+        if cached_trade_date != str(today):
+            _drop_observation_quote_cache(
+                quote_cache,
+                persistent_quote_cache,
+                market=market_norm,
+                ticker=ticker_norm,
+            )
+            return None
+
+    return dict(item)
+
+
 def _sina_us_afterhours_return_pct(
     symbol: str,
     *,
@@ -1921,79 +2019,27 @@ def fetch_premarket_benchmark_quote(
             "error": f"{session.window_word}基准配置不存在: {benchmark_key}",
         }
 
-    cached = _get_cached_premarket_quote(
+    cached = _get_valid_cached_observation_quote(
         quote_cache,
         persistent_quote_cache,
         market=spec["market"],
         ticker=spec["ticker"],
+        today=today,
         cache_now=cache_now,
-        ttl_minutes=session.quote_cache_ttl_minutes,
+        session=session,
+        kind=spec["kind"],
     )
-    if isinstance(cached, dict) and (_quote_item_has_value(cached) or cached.get("status") == "missing"):
-        source_lower = str(cached.get("source", "") or "").lower()
-        is_old_vix_close_cache = (
-            spec["kind"] == "vix_level"
-            and str(cached.get("cache_hit", "")).lower() == "file"
-            and "realtime" not in source_lower
+    if cached is not None:
+        cached.update(
+            {
+                "benchmark_key": spec["key"],
+                "label": spec["label"],
+                "ticker": spec["ticker"],
+                "market": spec["market"],
+                "kind": spec["kind"],
+            }
         )
-        if not is_old_vix_close_cache:
-            out = dict(cached)
-            if session.us_quote_mode == "afterhours" and spec["market"] == "US" and _quote_item_has_value(out):
-                target_us_date = _target_afterhours_us_date(cache_now)
-                try:
-                    out = _validate_afterhours_us_quote_item(
-                        out,
-                        target_us_date=target_us_date,
-                        symbol=spec["ticker"],
-                        source="afterhours_cache",
-                    )
-                except Exception:
-                    cache_key = _premarket_quote_tuple_key(spec["market"], spec["ticker"])
-                    quote_cache.pop(cache_key, None)
-                    if persistent_quote_cache is not None:
-                        persistent_quote_cache.pop(_premarket_quote_cache_key(spec["market"], spec["ticker"]), None)
-                    out = None
-            if session.us_quote_mode == "premarket" and spec["market"] == "US" and _quote_item_has_value(out):
-                target_us_date = _target_intraday_us_date(cache_now)
-                try:
-                    out = _validate_premarket_us_quote_item(
-                        out,
-                        target_us_date=target_us_date,
-                        symbol=spec["ticker"],
-                        source="premarket_cache",
-                    )
-                except Exception:
-                    cache_key = _premarket_quote_tuple_key(spec["market"], spec["ticker"])
-                    quote_cache.pop(cache_key, None)
-                    if persistent_quote_cache is not None:
-                        persistent_quote_cache.pop(_premarket_quote_cache_key(spec["market"], spec["ticker"]), None)
-                    out = None
-            if session.us_quote_mode == "intraday" and spec["market"] == "US" and _quote_item_has_value(out):
-                target_us_date = _target_intraday_us_date(cache_now)
-                try:
-                    out = _validate_intraday_us_quote_item(
-                        out,
-                        target_us_date=target_us_date,
-                        symbol=spec["ticker"],
-                        source="intraday_cache",
-                    )
-                except Exception:
-                    cache_key = _premarket_quote_tuple_key(spec["market"], spec["ticker"])
-                    quote_cache.pop(cache_key, None)
-                    if persistent_quote_cache is not None:
-                        persistent_quote_cache.pop(_premarket_quote_cache_key(spec["market"], spec["ticker"]), None)
-                    out = None
-            if out is not None:
-                out.update(
-                    {
-                        "benchmark_key": spec["key"],
-                        "label": spec["label"],
-                        "ticker": spec["ticker"],
-                        "market": spec["market"],
-                        "kind": spec["kind"],
-                    }
-                )
-                return out
+        return cached
 
     try:
         if spec["kind"] == "vix_level":
@@ -2585,11 +2631,6 @@ def estimate_premarket_holdings(
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     cache_now = coerce_bj_datetime(cache_now)
     us_quote_mode = str(session.us_quote_mode).lower()
-    target_us_date = ""
-    if us_quote_mode == "afterhours":
-        target_us_date = _target_afterhours_us_date(cache_now)
-    elif us_quote_mode == "intraday":
-        target_us_date = _target_intraday_us_date(cache_now)
     df = holdings_df.copy()
     metric_prefix = session.title_word
     return_col = f"{metric_prefix}涨跌幅"
@@ -2630,49 +2671,15 @@ def estimate_premarket_holdings(
                 _progress_status(progress, f"{item_label} -> zeroed 0.0000% {item.get('source', '')} {today}")
                 continue
 
-            item = _get_cached_premarket_quote(
+            item = _get_valid_cached_observation_quote(
                 quote_cache,
                 persistent_quote_cache,
                 market=market,
                 ticker=ticker,
+                today=today,
                 cache_now=cache_now,
-                ttl_minutes=session.quote_cache_ttl_minutes,
+                session=session,
             )
-            if item is not None and target_us_date and market == "US":
-                try:
-                    if us_quote_mode == "afterhours":
-                        item = _validate_afterhours_us_quote_item(
-                            item,
-                            target_us_date=target_us_date,
-                            symbol=ticker,
-                            source="afterhours_cache",
-                        )
-                    elif us_quote_mode == "premarket":
-                        item = _validate_premarket_us_quote_item(
-                            item,
-                            target_us_date=target_us_date,
-                            symbol=ticker,
-                            source="premarket_cache",
-                        )
-                    elif us_quote_mode == "intraday":
-                        item = _validate_intraday_us_quote_item(
-                            item,
-                            target_us_date=target_us_date,
-                            symbol=ticker,
-                            source="intraday_cache",
-                        )
-                except Exception:
-                    quote_cache.pop(key, None)
-                    if persistent_quote_cache is not None:
-                        persistent_quote_cache.pop(_premarket_quote_cache_key(market, ticker), None)
-                    item = None
-            if item is not None and us_quote_mode in {"premarket", "intraday"} and market in {"CN", "HK", "KR"}:
-                cached_trade_date = str(item.get("trade_date") or "").strip()
-                if cached_trade_date != today:
-                    quote_cache.pop(key, None)
-                    if persistent_quote_cache is not None:
-                        persistent_quote_cache.pop(_premarket_quote_cache_key(market, ticker), None)
-                    item = None
             if item is None:
                 _progress_status(progress, f"{item_label} 缓存未命中，重新请求")
                 item = fetch_holding_current_return(
